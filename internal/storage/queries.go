@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 )
 
 // GetQueriesDir returns the directory for saved queries
@@ -84,4 +86,32 @@ func ListQueries() ([]string, error) {
 	}
 
 	return queries, nil
+}
+
+// AppendQueryToHistory appends a query to the environment's monthly history file
+func AppendQueryToHistory(query string, environment db.Environment) error {
+	queriesDir, err := GetQueriesDir()
+	if err != nil {
+		return err
+	}
+
+	// Generate filename based on environment and current month
+	now := time.Now()
+	filename := fmt.Sprintf("%s_%s.sql", environment, now.Format("2006-01"))
+	filePath := filepath.Join(queriesDir, filename)
+
+	// Format the query entry with timestamp
+	timestamp := now.Format("2006-01-02 15:04:05")
+	entry := fmt.Sprintf("-- Executed on: %s (%s)\n%s\n\n", timestamp, environment, query)
+
+	// Open file in append mode (create if doesn't exist)
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Append the query entry
+	_, err = file.WriteString(entry)
+	return err
 }
