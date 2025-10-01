@@ -87,40 +87,83 @@ func (p *ConnectionsPanel) View() string {
 		content += "No connections configured\n"
 		content += "\nPress 'a' to add a connection"
 	} else {
-		for i, name := range connNames {
+		// Group connections by environment
+		envGroups := make(map[db.Environment][]string)
+		for _, name := range connNames {
 			conn, err := p.connMgr.GetConnection(name)
 			if err != nil {
 				continue
 			}
-
-			// Determine status icon
-			statusIcon := "⚪"
-			statusText := ""
-			switch conn.Status() {
-			case db.StatusConnected:
-				statusIcon = "🟢"
-				statusText = " ✓"
-			case db.StatusConnecting:
-				statusIcon = "🟡"
-				statusText = " ⟳"
-			case db.StatusError:
-				statusIcon = "🔴"
-				statusText = " ✗"
-			case db.StatusDisconnected:
-				statusIcon = "⚪"
-			}
-
-			// Mark selected connection (for navigation) and active connection
-			prefix := "  "
-			if i == p.selectedIndex {
-				prefix = "> " // Selected (highlighted)
-			}
-			if name == activeConn {
-				prefix = "▶ " // Active (connected)
-			}
-
 			config := conn.Config()
-			content += fmt.Sprintf("%s%s %s%s\n", prefix, statusIcon, config.Name, statusText)
+			env := config.Environment
+			if env == "" {
+				env = db.EnvDevelopment // Default to Development
+			}
+			envGroups[env] = append(envGroups[env], name)
+		}
+
+		// Render each environment group
+		envOrder := []db.Environment{db.EnvDevelopment, db.EnvStaging, db.EnvProduction}
+		currentIndex := 0 // Track overall index for selection
+
+		for _, env := range envOrder {
+			connections, exists := envGroups[env]
+			if !exists || len(connections) == 0 {
+				continue
+			}
+
+			// Environment header with icon
+			var envIcon string
+			switch env {
+			case db.EnvDevelopment:
+				envIcon = "🟢"
+			case db.EnvStaging:
+				envIcon = "🔵"
+			case db.EnvProduction:
+				envIcon = "🔴"
+			}
+			content += fmt.Sprintf("▼ %s %s\n", envIcon, env)
+
+			// Render connections in this environment
+			for _, name := range connections {
+				conn, err := p.connMgr.GetConnection(name)
+				if err != nil {
+					currentIndex++
+					continue
+				}
+
+				// Determine status icon
+				statusIcon := "⚪"
+				statusText := ""
+				switch conn.Status() {
+				case db.StatusConnected:
+					statusIcon = "🟢"
+					statusText = " ✓"
+				case db.StatusConnecting:
+					statusIcon = "🟡"
+					statusText = " ⟳"
+				case db.StatusError:
+					statusIcon = "🔴"
+					statusText = " ✗"
+				case db.StatusDisconnected:
+					statusIcon = "⚪"
+				}
+
+				// Mark selected connection (for navigation) and active connection
+				prefix := "  "
+				if currentIndex == p.selectedIndex {
+					prefix = "> " // Selected (highlighted)
+				}
+				if name == activeConn {
+					prefix = "▶ " // Active (connected)
+				}
+
+				config := conn.Config()
+				content += fmt.Sprintf("  %s%s %s%s\n", prefix, statusIcon, config.Name, statusText)
+				currentIndex++
+			}
+
+			content += "\n" // Add spacing between environment groups
 		}
 	}
 

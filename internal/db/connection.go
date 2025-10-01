@@ -31,15 +31,25 @@ func (s ConnectionStatus) String() string {
 	}
 }
 
+// Environment represents the deployment environment
+type Environment string
+
+const (
+	EnvDevelopment Environment = "Development"
+	EnvStaging     Environment = "Staging"
+	EnvProduction  Environment = "Production"
+)
+
 // ConnectionConfig holds database connection configuration
 type ConnectionConfig struct {
-	Name     string
-	Host     string
-	Port     int
-	Database string
-	Username string
-	Password string
-	SSLMode  string
+	Name        string
+	Host        string
+	Port        int
+	Database    string
+	Username    string
+	Password    string
+	SSLMode     string
+	Environment Environment
 }
 
 // Connection represents a database connection

@@ -39,11 +39,12 @@ const (
 	fieldUsername
 	fieldPassword
 	fieldSSLMode
+	fieldEnvironment
 )
 
 // NewConnectionFormDialog creates a new connection form dialog
 func NewConnectionFormDialog(mode DialogType, config *db.ConnectionConfig) *ConnectionFormDialog {
-	inputs := make([]textinput.Model, 7)
+	inputs := make([]textinput.Model, 8)
 
 	// Name
 	inputs[fieldName] = textinput.New()
@@ -90,12 +91,18 @@ func NewConnectionFormDialog(mode DialogType, config *db.ConnectionConfig) *Conn
 	inputs[fieldSSLMode].CharLimit = 20
 	inputs[fieldSSLMode].Width = 40
 
+	// Environment (display-only, cycled with left/right arrows)
+	inputs[fieldEnvironment] = textinput.New()
+	inputs[fieldEnvironment].Placeholder = "Development"
+	inputs[fieldEnvironment].CharLimit = 20
+	inputs[fieldEnvironment].Width = 40
+
 	dialog := &ConnectionFormDialog{
 		inputs:     inputs,
 		focusIndex: 0,
 		mode:       mode,
 		width:      60,
-		height:     20,
+		height:     22,
 	}
 
 	// If editing, pre-fill with existing config
@@ -108,6 +115,14 @@ func NewConnectionFormDialog(mode DialogType, config *db.ConnectionConfig) *Conn
 		inputs[fieldUsername].SetValue(config.Username)
 		inputs[fieldPassword].SetValue(config.Password)
 		inputs[fieldSSLMode].SetValue(config.SSLMode)
+		if config.Environment != "" {
+			inputs[fieldEnvironment].SetValue(string(config.Environment))
+		} else {
+			inputs[fieldEnvironment].SetValue(string(db.EnvDevelopment))
+		}
+	} else {
+		// Default to Development for new connections
+		inputs[fieldEnvironment].SetValue(string(db.EnvDevelopment))
 	}
 
 	return dialog
@@ -134,13 +149,36 @@ func (d *ConnectionFormDialog) Update(msg tea.Msg) (*ConnectionFormDialog, tea.C
 			}
 			d.inputs[d.focusIndex].Focus()
 			return d, nil
+
+		case "left", "right":
+			// Cycle environment when focused on environment field
+			if d.focusIndex == fieldEnvironment {
+				currentEnv := d.inputs[fieldEnvironment].Value()
+				var newEnv string
+				switch currentEnv {
+				case string(db.EnvDevelopment):
+					newEnv = string(db.EnvStaging)
+				case string(db.EnvStaging):
+					newEnv = string(db.EnvProduction)
+				case string(db.EnvProduction):
+					newEnv = string(db.EnvDevelopment)
+				default:
+					newEnv = string(db.EnvDevelopment)
+				}
+				d.inputs[fieldEnvironment].SetValue(newEnv)
+				return d, nil
+			}
 		}
 	}
 
-	// Update focused input
-	var cmd tea.Cmd
-	d.inputs[d.focusIndex], cmd = d.inputs[d.focusIndex].Update(msg)
-	return d, cmd
+	// Update focused input (but not for environment field which is read-only)
+	if d.focusIndex != fieldEnvironment {
+		var cmd tea.Cmd
+		d.inputs[d.focusIndex], cmd = d.inputs[d.focusIndex].Update(msg)
+		return d, cmd
+	}
+
+	return d, nil
 }
 
 // View renders the dialog
@@ -169,10 +207,27 @@ func (d *ConnectionFormDialog) View() string {
 		"Username:",
 		"Password:",
 		"SSL Mode:",
+		"Environment:",
 	}
 
 	for i, input := range d.inputs {
-		content += labelStyle.Render(labels[i]) + " " + input.View() + "\n"
+		label := labelStyle.Render(labels[i]) + " "
+		if i == fieldEnvironment {
+			// Add hint for environment field
+			envValue := input.Value()
+			var envIcon string
+			switch envValue {
+			case string(db.EnvDevelopment):
+				envIcon = "🟢"
+			case string(db.EnvStaging):
+				envIcon = "🔵"
+			case string(db.EnvProduction):
+				envIcon = "🔴"
+			}
+			content += label + envIcon + " " + input.View() + " [←/→ to change]\n"
+		} else {
+			content += label + input.View() + "\n"
+		}
 	}
 
 	content += "\n[Tab] Next field  [Enter] Save  [Esc] Cancel\n"
@@ -193,13 +248,14 @@ func (d *ConnectionFormDialog) GetConfig() (db.ConnectionConfig, error) {
 	}
 
 	config := db.ConnectionConfig{
-		Name:     d.inputs[fieldName].Value(),
-		Host:     d.inputs[fieldHost].Value(),
-		Port:     port,
-		Database: d.inputs[fieldDatabase].Value(),
-		Username: d.inputs[fieldUsername].Value(),
-		Password: d.inputs[fieldPassword].Value(),
-		SSLMode:  d.inputs[fieldSSLMode].Value(),
+		Name:        d.inputs[fieldName].Value(),
+		Host:        d.inputs[fieldHost].Value(),
+		Port:        port,
+		Database:    d.inputs[fieldDatabase].Value(),
+		Username:    d.inputs[fieldUsername].Value(),
+		Password:    d.inputs[fieldPassword].Value(),
+		SSLMode:     d.inputs[fieldSSLMode].Value(),
+		Environment: db.Environment(d.inputs[fieldEnvironment].Value()),
 	}
 
 	// Validation
@@ -217,6 +273,9 @@ func (d *ConnectionFormDialog) GetConfig() (db.ConnectionConfig, error) {
 	}
 	if config.SSLMode == "" {
 		config.SSLMode = "disable"
+	}
+	if config.Environment == "" {
+		config.Environment = db.EnvDevelopment
 	}
 
 	return config, nil
