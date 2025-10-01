@@ -1,14 +1,23 @@
 package panels
 
+import (
+	"fmt"
+
+	"github.com/MachineLearning-Nerd/lazydb/internal/db"
+)
+
 // ConnectionsPanel represents the left panel showing database connections
 type ConnectionsPanel struct {
-	width  int
-	height int
+	width     int
+	height    int
+	connMgr   *db.ConnectionManager
 }
 
 // NewConnectionsPanel creates a new connections panel
-func NewConnectionsPanel() *ConnectionsPanel {
-	return &ConnectionsPanel{}
+func NewConnectionsPanel(connMgr *db.ConnectionManager) *ConnectionsPanel {
+	return &ConnectionsPanel{
+		connMgr: connMgr,
+	}
 }
 
 // SetSize sets the panel dimensions
@@ -24,14 +33,48 @@ func (p *ConnectionsPanel) View() string {
 	}
 
 	content := "CONNECTIONS\n\n"
-	content += "▼ 🟢 Development\n"
-	content += "  • dev-local ✓\n"
-	content += "  • dev-docker\n\n"
-	content += "▶ 🔵 Staging\n"
-	content += "  • staging-db\n\n"
-	content += "▶ 🔴 Production\n"
-	content += "  • prod-master\n"
-	content += "  • prod-replica\n"
+
+	// List all connections
+	connNames := p.connMgr.ListConnections()
+	activeConn := p.connMgr.ActiveName()
+
+	if len(connNames) == 0 {
+		content += "No connections configured\n"
+		content += "\nPress 'a' to add a connection"
+	} else {
+		for _, name := range connNames {
+			conn, err := p.connMgr.GetConnection(name)
+			if err != nil {
+				continue
+			}
+
+			// Determine status icon
+			statusIcon := "⚪"
+			statusText := ""
+			switch conn.Status() {
+			case db.StatusConnected:
+				statusIcon = "🟢"
+				statusText = " ✓"
+			case db.StatusConnecting:
+				statusIcon = "🟡"
+				statusText = " ⟳"
+			case db.StatusError:
+				statusIcon = "🔴"
+				statusText = " ✗"
+			case db.StatusDisconnected:
+				statusIcon = "⚪"
+			}
+
+			// Mark active connection
+			prefix := "  "
+			if name == activeConn {
+				prefix = "▶ "
+			}
+
+			config := conn.Config()
+			content += fmt.Sprintf("%s%s %s%s\n", prefix, statusIcon, config.Name, statusText)
+		}
+	}
 
 	return content
 }
