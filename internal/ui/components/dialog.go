@@ -18,6 +18,7 @@ const (
 	DialogTypeAdd
 	DialogTypeEdit
 	DialogTypeDelete
+	DialogTypeHelp
 )
 
 // ConnectionFormDialog represents a form for adding/editing connections
