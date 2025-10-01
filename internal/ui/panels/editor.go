@@ -17,7 +17,12 @@ func NewEditorPanel() *EditorPanel {
 	ta := textarea.New()
 	ta.Placeholder = "Enter SQL query here..."
 	ta.SetValue("SELECT * FROM pg_database;")
+	ta.ShowLineNumbers = true
+	ta.CharLimit = 10000 // Reasonable limit for SQL queries
 	ta.Focus()
+
+	// Set some style preferences
+	ta.FocusedStyle.CursorLine = ta.FocusedStyle.CursorLine
 
 	return &EditorPanel{
 		textarea: ta,
@@ -79,5 +84,5 @@ func (p *EditorPanel) Blur() {
 
 // Help returns help text for the editor panel
 func (p *EditorPanel) Help() string {
-	return "[Ctrl-R] Execute query"
+	return "[Ctrl-R] Execute  [F2] Save  [Ctrl-A/E] line start/end  [Ctrl-K/U] delete line"
 }
