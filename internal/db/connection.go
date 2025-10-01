@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"sort"
 )
 
 // ConnectionStatus represents the state of a database connection
@@ -94,16 +95,43 @@ func (cm *ConnectionManager) GetActive() (Connection, error) {
 	return cm.GetConnection(cm.active)
 }
 
-// ListConnections returns all connection names
+// ListConnections returns all connection names in sorted order
 func (cm *ConnectionManager) ListConnections() []string {
 	names := make([]string, 0, len(cm.connections))
 	for name := range cm.connections {
 		names = append(names, name)
 	}
+	// Sort for stable, predictable order
+	sort.Strings(names)
 	return names
 }
 
 // ActiveName returns the name of the active connection
 func (cm *ConnectionManager) ActiveName() string {
 	return cm.active
+}
+
+// RemoveConnection removes a connection from the manager
+func (cm *ConnectionManager) RemoveConnection(name string) error {
+	if _, exists := cm.connections[name]; !exists {
+		return fmt.Errorf("connection %s not found", name)
+	}
+
+	delete(cm.connections, name)
+
+	// Clear active if we're deleting the active connection
+	if cm.active == name {
+		cm.active = ""
+	}
+
+	return nil
+}
+
+// GetAllConfigs returns all connection configurations (for persistence)
+func (cm *ConnectionManager) GetAllConfigs() []ConnectionConfig {
+	configs := make([]ConnectionConfig, 0, len(cm.connections))
+	for _, conn := range cm.connections {
+		configs = append(configs, conn.Config())
+	}
+	return configs
 }
