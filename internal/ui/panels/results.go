@@ -4,21 +4,26 @@ import (
 	"fmt"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 )
 
 // ResultsPanel represents the right panel showing query results
 type ResultsPanel struct {
-	width   int
-	height  int
-	result  *db.QueryResult
-	hasData bool
+	width       int
+	height      int
+	result      *db.QueryResult
+	hasData     bool
+	scrollX     int // horizontal scroll offset
+	scrollY     int // vertical scroll offset
 }
 
 // NewResultsPanel creates a new results panel
 func NewResultsPanel() *ResultsPanel {
 	return &ResultsPanel{
 		hasData: false,
+		scrollX: 0,
+		scrollY: 0,
 	}
 }
 
@@ -32,12 +37,59 @@ func (p *ResultsPanel) SetSize(width, height int) {
 func (p *ResultsPanel) SetResult(result db.QueryResult) {
 	p.result = &result
 	p.hasData = true
+	p.scrollX = 0
+	p.scrollY = 0
 }
 
 // Clear clears the current results
 func (p *ResultsPanel) Clear() {
 	p.result = nil
 	p.hasData = false
+	p.scrollX = 0
+	p.scrollY = 0
+}
+
+// Update handles keyboard input for scrolling
+func (p *ResultsPanel) Update(msg tea.Msg) {
+	if !p.hasData || p.result == nil {
+		return
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "left", "h":
+			if p.scrollX > 0 {
+				p.scrollX -= 5
+			}
+		case "right", "l":
+			p.scrollX += 5
+		case "up", "k":
+			if p.scrollY > 0 {
+				p.scrollY--
+			}
+		case "down", "j":
+			if p.result != nil && p.scrollY < len(p.result.Rows)-1 {
+				p.scrollY++
+			}
+		case "home":
+			p.scrollX = 0
+		case "end":
+			p.scrollX = 1000 // scroll far right
+		case "pgup":
+			p.scrollY -= 10
+			if p.scrollY < 0 {
+				p.scrollY = 0
+			}
+		case "pgdown":
+			if p.result != nil {
+				p.scrollY += 10
+				if p.scrollY >= len(p.result.Rows) {
+					p.scrollY = len(p.result.Rows) - 1
+				}
+			}
+		}
+	}
 }
 
 // View renders the results panel
@@ -66,81 +118,109 @@ func (p *ResultsPanel) View() string {
 		return content
 	}
 
-	// Calculate column widths
+	// Calculate column widths (min 10, max 30 characters per column)
 	colWidths := make([]int, len(p.result.Columns))
 	for i, col := range p.result.Columns {
-		colWidths[i] = len(col)
+		colWidths[i] = max(10, len(col))
 	}
 	for _, row := range p.result.Rows {
 		for i, cell := range row {
-			if i < len(colWidths) && len(cell) > colWidths[i] {
-				colWidths[i] = len(cell)
+			if i < len(colWidths) {
+				cellLen := len(cell)
+				if cellLen > colWidths[i] && colWidths[i] < 30 {
+					colWidths[i] = min(30, cellLen)
+				}
 			}
 		}
 	}
 
-	// Limit column widths to fit in panel
-	maxColWidth := 20
-	for i := range colWidths {
-		if colWidths[i] > maxColWidth {
-			colWidths[i] = maxColWidth
-		}
-	}
+	// Build table as a string, then apply horizontal scroll
+	var tableLines []string
 
-	// Build header
-	header := "║"
-	separator := "╠"
+	// Header row
+	headerLine := "│ "
 	for i, col := range p.result.Columns {
-		header += " " + padOrTruncate(col, colWidths[i]) + " ║"
-		separator += strings.Repeat("═", colWidths[i]+2) + "╬"
+		headerLine += padOrTruncate(col, colWidths[i]) + " │ "
 	}
-	separator = separator[:len(separator)-1] + "╣"
+	tableLines = append(tableLines, headerLine)
 
-	// Build top border
-	topBorder := "╔"
+	// Separator
+	separatorLine := "├─"
 	for i := range p.result.Columns {
-		topBorder += strings.Repeat("═", colWidths[i]+2) + "╦"
+		separatorLine += strings.Repeat("─", colWidths[i]) + "─┼─"
 	}
-	topBorder = topBorder[:len(topBorder)-1] + "╗"
+	separatorLine = separatorLine[:len(separatorLine)-2] + "┤"
+	tableLines = append(tableLines, separatorLine)
 
-	content += topBorder + "\n"
-	content += header + "\n"
-	content += separator + "\n"
-
-	// Build rows (limit to fit in panel)
-	maxRows := 10
-	displayRows := p.result.Rows
-	if len(displayRows) > maxRows {
-		displayRows = displayRows[:maxRows]
+	// Data rows
+	maxDisplayRows := p.height - 8 // Leave room for header, footer, etc.
+	if maxDisplayRows < 1 {
+		maxDisplayRows = 5
 	}
 
-	for _, row := range displayRows {
-		rowStr := "║"
+	startRow := p.scrollY
+	endRow := min(startRow+maxDisplayRows, len(p.result.Rows))
+
+	for rowIdx := startRow; rowIdx < endRow; rowIdx++ {
+		row := p.result.Rows[rowIdx]
+		rowLine := "│ "
 		for i, cell := range row {
 			if i < len(colWidths) {
-				rowStr += " " + padOrTruncate(cell, colWidths[i]) + " ║"
+				rowLine += padOrTruncate(cell, colWidths[i]) + " │ "
 			}
 		}
-		content += rowStr + "\n"
+		tableLines = append(tableLines, rowLine)
 	}
 
-	// Build bottom border
-	bottomBorder := "╚"
-	for i := range p.result.Columns {
-		bottomBorder += strings.Repeat("═", colWidths[i]+2) + "╩"
+	// Apply horizontal scrolling
+	scrolledLines := make([]string, len(tableLines))
+	for i, line := range tableLines {
+		if p.scrollX < len(line) {
+			scrolledLines[i] = line[p.scrollX:]
+		} else {
+			scrolledLines[i] = ""
+		}
+		// Truncate to panel width
+		if len(scrolledLines[i]) > p.width-4 {
+			scrolledLines[i] = scrolledLines[i][:p.width-4]
+		}
 	}
-	bottomBorder = bottomBorder[:len(bottomBorder)-1] + "╝"
 
-	content += bottomBorder + "\n\n"
+	content += strings.Join(scrolledLines, "\n")
+	content += "\n\n"
 
-	// Add summary
-	if len(p.result.Rows) > maxRows {
-		content += fmt.Sprintf("%d rows (showing %d), %dms", p.result.RowCount, maxRows, p.result.ExecutionMs)
+	// Add summary with scroll indicators
+	scrollInfo := ""
+	if p.scrollX > 0 {
+		scrollInfo += "◄ "
+	}
+	if len(p.result.Rows) > endRow {
+		scrollInfo += fmt.Sprintf("%d rows (showing %d-%d), %dms", p.result.RowCount, startRow+1, endRow, p.result.ExecutionMs)
 	} else {
-		content += fmt.Sprintf("%d rows, %dms", p.result.RowCount, p.result.ExecutionMs)
+		scrollInfo += fmt.Sprintf("%d rows, %dms", p.result.RowCount, p.result.ExecutionMs)
 	}
+	if p.scrollX > 0 || len(p.result.Rows) > maxDisplayRows {
+		scrollInfo += " ►"
+	}
+
+	content += scrollInfo
 
 	return content
+}
+
+// Helper functions
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // padOrTruncate pads or truncates a string to the specified width
@@ -156,5 +236,5 @@ func padOrTruncate(s string, width int) string {
 
 // Help returns help text for the results panel
 func (p *ResultsPanel) Help() string {
-	return "[j/k] scroll  [y] copy  [e] export"
+	return "[←→] scroll horizontal  [↑↓] scroll vertical  [Home/End] jump"
 }

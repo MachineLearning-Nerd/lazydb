@@ -79,5 +79,5 @@ func (p *EditorPanel) Blur() {
 
 // Help returns help text for the editor panel
 func (p *EditorPanel) Help() string {
-	return "[Ctrl-R] Execute  [Ctrl-S] Save query"
+	return "[Ctrl-R] Execute query"
 }
