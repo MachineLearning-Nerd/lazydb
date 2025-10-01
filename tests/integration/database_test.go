@@ -78,11 +78,8 @@ func TestQueryExecution(t *testing.T) {
 	}
 	defer conn.Disconnect(ctx)
 
-	// Get underlying connection
-	pgConn := conn.(*db.PostgresConnection)
-
 	// Test simple query
-	result := db.ExecuteQuery(ctx, pgConn.Conn(), "SELECT 1 as num, 'test' as text")
+	result := db.ExecuteQuery(ctx, conn.Conn(), "SELECT 1 as num, 'test' as text")
 
 	if result.Error != nil {
 		t.Fatalf("Query execution failed: %v", result.Error)

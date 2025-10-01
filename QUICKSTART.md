@@ -87,6 +87,50 @@ The schema explorer shows:
 - 👁 Views - Database views
 - ⚙ Functions - Stored procedures and functions
 
+### Search Database Objects
+
+Quickly find tables, views, or functions:
+
+```
+Press '1' → Focus Connections panel
+Press 's' → Open Schema Explorer
+Press '/' → Enter search mode
+Type 'user' → Filters to show only objects containing 'user'
+  🔍 Search: user (5 matches)
+
+  ▼ 📂 public
+    ▼ 📊 Tables (2)
+      ▶ 📋 users
+      ▶ 📋 user_sessions
+
+Use j/k → Navigate filtered results
+Press 'p' → Preview selected table
+Press Esc → Clear search and show all objects
+```
+
+**Search features:**
+- Case-insensitive substring matching
+- Real-time filtering as you type
+- Shows match count
+- Preserves tree structure
+- Works on schemas, tables, views, functions, and columns
+
+### Refresh Schema Data
+
+Reload schema from database to see latest changes:
+
+```
+Press 's' → Open Schema Explorer
+Press 'r' → Refresh
+See loading indicator → Schema reloads with current data
+```
+
+**When to use refresh:**
+- After creating/dropping tables
+- After database schema changes
+- To apply new filter settings (like excluding system tables)
+- When schema data seems stale
+
 ### Edit Complex Queries in Neovim
 
 ```
@@ -191,8 +235,16 @@ Connections:
 Schema Explorer:
   j/k          → Navigate
   Enter/Space  → Expand/collapse
+  /            → Search mode
+  r            → Refresh schema
   p            → Preview table
-  Esc          → Back to connections
+  Esc          → Exit search / Back
+
+Search Mode:
+  [type]       → Filter results
+  Backspace    → Delete character
+  j/k          → Navigate results
+  Esc          → Clear search
 
 Editor:
   Ctrl+R → Execute

@@ -38,6 +38,7 @@ LazyDB brings the power and convenience of terminal-based database management wi
 ### Schema Exploration
 - ✅ Browse database schemas, tables, views, and functions
 - ✅ Expandable tree navigation with vim bindings
+- ✅ Real-time search/filter with `/` key
 - ✅ View table column details (type, nullable, default)
 - ✅ One-key table preview (SELECT * LIMIT 10)
 - ✅ Lazy loading for optimal performance
@@ -123,8 +124,20 @@ sudo mv lazydb /usr/local/bin/
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
 | `Enter` / `Space` | Expand/collapse node |
+| `/` | Enter search mode |
+| `r` | Refresh schema from database |
 | `p` | Preview table (SELECT * LIMIT 10) |
-| `Esc` | Return to connections view |
+| `Esc` | Exit search / Return to connections |
+
+**In Search Mode:**
+| Key | Action |
+|-----|--------|
+| Type characters | Filter results in real-time |
+| `Backspace` | Delete last character |
+| `j` / `k` | Navigate filtered results |
+| `Enter` | Expand/collapse node |
+| `p` | Preview table |
+| `Esc` | Clear search and exit |
 
 ### Editor Panel
 | Key | Action |

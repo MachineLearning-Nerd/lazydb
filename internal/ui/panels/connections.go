@@ -97,7 +97,58 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 
 		// Route events based on view mode
 		if p.viewMode == ViewSchema && p.schemaTree != nil {
+			// Check if in search mode
+			if p.schemaTree.IsSearchMode() {
+				switch msg.String() {
+				case "esc":
+					// Exit search mode
+					p.schemaTree.ExitSearchMode()
+					return nil
+				case "backspace":
+					// Delete last character
+					p.schemaTree.DeleteSearchChar()
+					return nil
+				case "j", "down":
+					// Navigate through filtered results
+					p.schemaTree.MoveDown()
+					return nil
+				case "k", "up":
+					// Navigate through filtered results
+					p.schemaTree.MoveUp()
+					return nil
+				case "enter", " ":
+					// Can still expand/collapse in search mode
+					return p.schemaTree.Toggle(p.ctx)
+				case "p":
+					// Preview table in search mode
+					selected := p.schemaTree.GetSelected()
+					if selected != nil && selected.Type == "table" {
+						return func() tea.Msg {
+							return TablePreviewMsg{
+								Schema: selected.Schema,
+								Table:  selected.Name,
+							}
+						}
+					}
+					return nil
+				default:
+					// Handle regular character input for search
+					if len(msg.String()) == 1 && msg.Type == tea.KeyRunes {
+						p.schemaTree.AddSearchChar(rune(msg.String()[0]))
+					}
+					return nil
+				}
+			}
+
+			// Normal navigation mode (not in search)
 			switch msg.String() {
+			case "/":
+				// Enter search mode
+				p.schemaTree.EnterSearchMode()
+				return nil
+			case "r":
+				// Refresh schema data from database
+				return p.schemaTree.RefreshSchemas(p.ctx)
 			case "j", "down":
 				p.schemaTree.MoveDown()
 			case "k", "up":
@@ -304,7 +355,11 @@ func (p *ConnectionsPanel) View() string {
 // Help returns help text for the connections panel
 func (p *ConnectionsPanel) Help() string {
 	if p.viewMode == ViewSchema {
-		return "[j/k] navigate  [Enter/Space] expand  [Esc] back  [p] preview table"
+		// Check if in search mode
+		if p.schemaTree != nil && p.schemaTree.IsSearchMode() {
+			return "[type to search]  [Esc] clear search  [j/k] navigate  [Enter] expand  [p] preview"
+		}
+		return "[j/k] navigate  [Enter/Space] expand  [/] search  [r] refresh  [p] preview  [Esc] back"
 	}
 	return "[a] add  [d] delete  [e] edit  [Enter] connect  [s] schema"
 }

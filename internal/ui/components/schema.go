@@ -3,6 +3,7 @@ package components
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,6 +30,9 @@ type SchemaTree struct {
 	err            error
 	maxVisibleRows int
 	scrollOffset   int
+	searchMode     bool
+	searchTerm     string
+	matchCount     int
 }
 
 // NewSchemaTree creates a new schema tree
@@ -50,6 +54,23 @@ func (st *SchemaTree) LoadSchemas(ctx context.Context) tea.Cmd {
 		}
 		return SchemasLoadedMsg{Schemas: schemas}
 	}
+}
+
+// RefreshSchemas reloads all schemas from the database
+func (st *SchemaTree) RefreshSchemas(ctx context.Context) tea.Cmd {
+	// Clear existing data
+	st.root.Children = []*SchemaNode{}
+	st.flatList = []*SchemaNode{}
+	st.selectedIndex = 0
+	st.scrollOffset = 0
+
+	// Exit search mode if active
+	st.searchMode = false
+	st.searchTerm = ""
+	st.matchCount = 0
+
+	// Reload schemas from database
+	return st.LoadSchemas(ctx)
 }
 
 // LoadSchemaObjects loads tables, views, and functions for a schema
@@ -122,7 +143,12 @@ func (st *SchemaTree) Toggle(ctx context.Context) tea.Cmd {
 		}
 	}
 
-	st.rebuildFlatList()
+	// Rebuild list - use filtered version if in search mode
+	if st.searchMode {
+		st.rebuildFilteredList()
+	} else {
+		st.rebuildFlatList()
+	}
 	return nil
 }
 
@@ -171,7 +197,12 @@ func (st *SchemaTree) HandleSchemasLoaded(schemas []string) {
 			Children: []*SchemaNode{},
 		}
 	}
-	st.rebuildFlatList()
+	// Preserve search mode if active
+	if st.searchMode {
+		st.rebuildFilteredList()
+	} else {
+		st.rebuildFlatList()
+	}
 }
 
 // HandleSchemaObjectsLoaded handles the schema objects loaded message
@@ -261,7 +292,12 @@ func (st *SchemaTree) HandleSchemaObjectsLoaded(schema string, tables, views, fu
 		schemaNode.Children = append(schemaNode.Children, functionsNode)
 	}
 
-	st.rebuildFlatList()
+	// Preserve search mode if active
+	if st.searchMode {
+		st.rebuildFilteredList()
+	} else {
+		st.rebuildFlatList()
+	}
 }
 
 // HandleTableColumnsLoaded handles the table columns loaded message
@@ -308,7 +344,12 @@ func (st *SchemaTree) HandleTableColumnsLoaded(schema, table string, columns []d
 		}
 	}
 
-	st.rebuildFlatList()
+	// Preserve search mode if active
+	if st.searchMode {
+		st.rebuildFilteredList()
+	} else {
+		st.rebuildFlatList()
+	}
 }
 
 // rebuildFlatList rebuilds the flat list for navigation
@@ -340,11 +381,30 @@ func (st *SchemaTree) View() string {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(fmt.Sprintf("Error: %v", st.err))
 	}
 
+	var output string
+
+	// Show search bar if in search mode
+	if st.searchMode {
+		searchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
+		output += searchStyle.Render(fmt.Sprintf("🔍 Search: %s", st.searchTerm))
+
+		if st.matchCount > 0 {
+			countStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+			output += " " + countStyle.Render(fmt.Sprintf("(%d matches)", st.matchCount))
+		} else if st.searchTerm != "" {
+			noMatchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+			output += " " + noMatchStyle.Render("(no matches)")
+		}
+		output += "\n\n"
+	}
+
 	if len(st.flatList) == 0 {
+		if st.searchMode && st.searchTerm != "" {
+			return output + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("No matches found")
+		}
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("No schemas loaded")
 	}
 
-	var output string
 	visibleNodes := st.flatList[st.scrollOffset:]
 	if len(visibleNodes) > st.maxVisibleRows {
 		visibleNodes = visibleNodes[:st.maxVisibleRows]
@@ -434,6 +494,135 @@ func (st *SchemaTree) renderNode(node *SchemaNode, selected bool) string {
 // SetMaxVisibleRows sets the maximum visible rows
 func (st *SchemaTree) SetMaxVisibleRows(rows int) {
 	st.maxVisibleRows = rows
+}
+
+// Search functionality
+
+// IsSearchMode returns true if search mode is active
+func (st *SchemaTree) IsSearchMode() bool {
+	return st.searchMode
+}
+
+// EnterSearchMode activates search mode and clears the search term
+func (st *SchemaTree) EnterSearchMode() {
+	st.searchMode = true
+	st.searchTerm = ""
+	st.matchCount = 0
+	st.selectedIndex = 0
+	st.scrollOffset = 0
+}
+
+// ExitSearchMode deactivates search mode and rebuilds the full list
+func (st *SchemaTree) ExitSearchMode() {
+	st.searchMode = false
+	st.searchTerm = ""
+	st.matchCount = 0
+	st.selectedIndex = 0
+	st.scrollOffset = 0
+	st.rebuildFlatList()
+}
+
+// AddSearchChar appends a character to the search term and rebuilds the filtered list
+func (st *SchemaTree) AddSearchChar(char rune) {
+	st.searchTerm += string(char)
+	st.rebuildFilteredList()
+}
+
+// DeleteSearchChar removes the last character from the search term
+func (st *SchemaTree) DeleteSearchChar() {
+	if len(st.searchTerm) == 0 {
+		st.ExitSearchMode()
+		return
+	}
+	st.searchTerm = st.searchTerm[:len(st.searchTerm)-1]
+	if len(st.searchTerm) == 0 {
+		st.ExitSearchMode()
+	} else {
+		st.rebuildFilteredList()
+	}
+}
+
+// matchesSearch checks if a node matches the search term (case-insensitive)
+func (st *SchemaTree) matchesSearch(node *SchemaNode, term string) bool {
+	if term == "" {
+		return true
+	}
+
+	// Convert both to lowercase for case-insensitive matching
+	nodeName := strings.ToLower(node.Name)
+	searchTerm := strings.ToLower(term)
+
+	return strings.Contains(nodeName, searchTerm)
+}
+
+// nodeOrChildMatches checks if node or any of its children match the search
+func (st *SchemaTree) nodeOrChildMatches(node *SchemaNode, term string) bool {
+	// Check if current node matches
+	if st.matchesSearch(node, term) {
+		return true
+	}
+
+	// Recursively check children
+	for _, child := range node.Children {
+		if st.nodeOrChildMatches(child, term) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// rebuildFilteredList rebuilds the flat list with only matching nodes
+func (st *SchemaTree) rebuildFilteredList() {
+	st.flatList = []*SchemaNode{}
+	st.matchCount = 0
+
+	if st.searchTerm == "" {
+		st.addNodeToFlatList(st.root, 0)
+		return
+	}
+
+	// Build filtered list
+	st.addFilteredNodeToFlatList(st.root, 0)
+
+	// Reset selection if out of bounds
+	if st.selectedIndex >= len(st.flatList) {
+		st.selectedIndex = 0
+	}
+	st.adjustScroll()
+}
+
+// addFilteredNodeToFlatList recursively adds matching nodes to flat list
+func (st *SchemaTree) addFilteredNodeToFlatList(node *SchemaNode, depth int) {
+	if node.Type == "root" {
+		// Process root's children
+		for _, child := range node.Children {
+			st.addFilteredNodeToFlatList(child, depth)
+		}
+		return
+	}
+
+	// Check if this node or any child matches
+	if st.nodeOrChildMatches(node, st.searchTerm) {
+		st.flatList = append(st.flatList, node)
+
+		// Count all matching nodes
+		if st.matchesSearch(node, st.searchTerm) {
+			st.matchCount++
+		}
+
+		// Auto-expand nodes that contain matches
+		if st.nodeOrChildMatches(node, st.searchTerm) && len(node.Children) > 0 {
+			node.Expanded = true
+		}
+
+		// If expanded, process children
+		if node.Expanded {
+			for _, child := range node.Children {
+				st.addFilteredNodeToFlatList(child, depth+1)
+			}
+		}
+	}
 }
 
 // Message types for schema operations

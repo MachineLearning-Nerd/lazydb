@@ -93,7 +93,8 @@ func (p *PostgresConnection) ListSchemas(ctx context.Context) ([]string, error) 
 	query := `
 		SELECT schema_name
 		FROM information_schema.schemata
-		WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		WHERE schema_name NOT LIKE 'pg_%'
+		  AND schema_name != 'information_schema'
 		ORDER BY schema_name
 	`
 
@@ -124,7 +125,9 @@ func (p *PostgresConnection) ListTables(ctx context.Context, schema string) ([]S
 	query := `
 		SELECT table_name
 		FROM information_schema.tables
-		WHERE table_schema = $1 AND table_type = 'BASE TABLE'
+		WHERE table_schema = $1
+		  AND table_type = 'BASE TABLE'
+		  AND table_name NOT LIKE 'pg_%'
 		ORDER BY table_name
 	`
 
