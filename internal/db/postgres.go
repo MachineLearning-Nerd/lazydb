@@ -83,3 +83,176 @@ func (p *PostgresConnection) Config() ConnectionConfig {
 func (p *PostgresConnection) Conn() *pgx.Conn {
 	return p.conn
 }
+
+// ListSchemas returns all schemas in the database
+func (p *PostgresConnection) ListSchemas(ctx context.Context) ([]string, error) {
+	if p.conn == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	query := `
+		SELECT schema_name
+		FROM information_schema.schemata
+		WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		ORDER BY schema_name
+	`
+
+	rows, err := p.conn.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list schemas: %w", err)
+	}
+	defer rows.Close()
+
+	var schemas []string
+	for rows.Next() {
+		var schema string
+		if err := rows.Scan(&schema); err != nil {
+			return nil, fmt.Errorf("failed to scan schema: %w", err)
+		}
+		schemas = append(schemas, schema)
+	}
+
+	return schemas, rows.Err()
+}
+
+// ListTables returns all tables in a schema
+func (p *PostgresConnection) ListTables(ctx context.Context, schema string) ([]SchemaObject, error) {
+	if p.conn == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	query := `
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = $1 AND table_type = 'BASE TABLE'
+		ORDER BY table_name
+	`
+
+	rows, err := p.conn.Query(ctx, query, schema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tables: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []SchemaObject
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("failed to scan table: %w", err)
+		}
+		tables = append(tables, SchemaObject{
+			Name:   name,
+			Type:   "table",
+			Schema: schema,
+		})
+	}
+
+	return tables, rows.Err()
+}
+
+// ListViews returns all views in a schema
+func (p *PostgresConnection) ListViews(ctx context.Context, schema string) ([]SchemaObject, error) {
+	if p.conn == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	query := `
+		SELECT table_name
+		FROM information_schema.views
+		WHERE table_schema = $1
+		ORDER BY table_name
+	`
+
+	rows, err := p.conn.Query(ctx, query, schema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list views: %w", err)
+	}
+	defer rows.Close()
+
+	var views []SchemaObject
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("failed to scan view: %w", err)
+		}
+		views = append(views, SchemaObject{
+			Name:   name,
+			Type:   "view",
+			Schema: schema,
+		})
+	}
+
+	return views, rows.Err()
+}
+
+// ListFunctions returns all functions in a schema
+func (p *PostgresConnection) ListFunctions(ctx context.Context, schema string) ([]SchemaObject, error) {
+	if p.conn == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	query := `
+		SELECT routine_name
+		FROM information_schema.routines
+		WHERE routine_schema = $1 AND routine_type = 'FUNCTION'
+		ORDER BY routine_name
+	`
+
+	rows, err := p.conn.Query(ctx, query, schema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list functions: %w", err)
+	}
+	defer rows.Close()
+
+	var functions []SchemaObject
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("failed to scan function: %w", err)
+		}
+		functions = append(functions, SchemaObject{
+			Name:   name,
+			Type:   "function",
+			Schema: schema,
+		})
+	}
+
+	return functions, rows.Err()
+}
+
+// GetTableColumns returns column information for a table
+func (p *PostgresConnection) GetTableColumns(ctx context.Context, schema, table string) ([]TableColumn, error) {
+	if p.conn == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	query := `
+		SELECT
+			column_name,
+			data_type,
+			is_nullable,
+			COALESCE(column_default, '')
+		FROM information_schema.columns
+		WHERE table_schema = $1 AND table_name = $2
+		ORDER BY ordinal_position
+	`
+
+	rows, err := p.conn.Query(ctx, query, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get table columns: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []TableColumn
+	for rows.Next() {
+		var col TableColumn
+		var nullable string
+		if err := rows.Scan(&col.Name, &col.Type, &nullable, &col.Default); err != nil {
+			return nil, fmt.Errorf("failed to scan column: %w", err)
+		}
+		col.Nullable = (nullable == "YES")
+		columns = append(columns, col)
+	}
+
+	return columns, rows.Err()
+}

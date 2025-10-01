@@ -52,6 +52,21 @@ type ConnectionConfig struct {
 	Environment Environment
 }
 
+// SchemaObject represents a database schema object
+type SchemaObject struct {
+	Name   string
+	Type   string // "table", "view", "function", "sequence"
+	Schema string
+}
+
+// TableColumn represents a table column
+type TableColumn struct {
+	Name     string
+	Type     string
+	Nullable bool
+	Default  string
+}
+
 // Connection represents a database connection
 type Connection interface {
 	Connect(ctx context.Context) error
@@ -59,6 +74,13 @@ type Connection interface {
 	Ping(ctx context.Context) error
 	Status() ConnectionStatus
 	Config() ConnectionConfig
+
+	// Schema exploration methods
+	ListSchemas(ctx context.Context) ([]string, error)
+	ListTables(ctx context.Context, schema string) ([]SchemaObject, error)
+	ListViews(ctx context.Context, schema string) ([]SchemaObject, error)
+	ListFunctions(ctx context.Context, schema string) ([]SchemaObject, error)
+	GetTableColumns(ctx context.Context, schema, table string) ([]TableColumn, error)
 }
 
 // ConnectionManager manages multiple database connections

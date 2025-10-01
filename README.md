@@ -19,6 +19,7 @@ LazyDB brings the power and convenience of terminal-based database management wi
 - **🔐 Encrypted Storage**: AES-256-GCM password encryption for connection credentials
 - **📜 Automatic Query History**: Per-environment monthly query logs
 - **❓ PostgreSQL Quick Reference**: Built-in help with common queries (Press `?`)
+- **🗂️ Schema Explorer**: Browse schemas, tables, views, functions, and columns
 
 ### Query Management
 - ✅ Multi-line SQL editor
@@ -33,6 +34,13 @@ LazyDB brings the power and convenience of terminal-based database management wi
 - ✅ Visual connection status indicators
 - ✅ Persistent connection storage
 - ✅ Encrypted password storage
+
+### Schema Exploration
+- ✅ Browse database schemas, tables, views, and functions
+- ✅ Expandable tree navigation with vim bindings
+- ✅ View table column details (type, nullable, default)
+- ✅ One-key table preview (SELECT * LIMIT 10)
+- ✅ Lazy loading for optimal performance
 
 ## 📦 Installation
 
@@ -107,6 +115,16 @@ sudo mv lazydb /usr/local/bin/
 | `a` | Add new connection |
 | `e` | Edit selected connection |
 | `d` | Delete selected connection |
+| `s` | Open schema explorer |
+
+### Schema Explorer
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move down |
+| `k` / `↑` | Move up |
+| `Enter` / `Space` | Expand/collapse node |
+| `p` | Preview table (SELECT * LIMIT 10) |
+| `Esc` | Return to connections view |
 
 ### Editor Panel
 | Key | Action |
@@ -196,13 +214,15 @@ TEST_POSTGRES_DSN="postgres://postgres:postgres@localhost:5432/postgres" \
 - [x] Password encryption
 - [x] Query history logging
 - [x] Help reference dialog
+- [x] Schema explorer (schemas, tables, views, functions, columns)
+- [x] Table preview functionality
 
 ### v1.1 (Planned)
 - [ ] MySQL support
 - [ ] SQLite support
-- [ ] Schema explorer (tables, views, functions)
 - [ ] Query library with templates
 - [ ] Export results (CSV, JSON, SQL)
+- [ ] Query history viewer
 
 ### v2.0 (Future)
 - [ ] Transaction support

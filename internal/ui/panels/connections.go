@@ -1,10 +1,20 @@
 package panels
 
 import (
+	"context"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/MachineLearning-Nerd/lazydb/internal/db"
+	"github.com/MachineLearning-Nerd/lazydb/internal/ui/components"
+)
+
+// ViewMode represents what's being displayed in the connections panel
+type ViewMode int
+
+const (
+	ViewConnections ViewMode = iota
+	ViewSchema
 )
 
 // ConnectionsPanel represents the left panel showing database connections
@@ -13,13 +23,18 @@ type ConnectionsPanel struct {
 	height        int
 	connMgr       *db.ConnectionManager
 	selectedIndex int // Currently selected connection (for navigation)
+	viewMode      ViewMode
+	schemaTree    *components.SchemaTree
+	ctx           context.Context
 }
 
 // NewConnectionsPanel creates a new connections panel
-func NewConnectionsPanel(connMgr *db.ConnectionManager) *ConnectionsPanel {
+func NewConnectionsPanel(connMgr *db.ConnectionManager, ctx context.Context) *ConnectionsPanel {
 	return &ConnectionsPanel{
 		connMgr:       connMgr,
 		selectedIndex: 0,
+		viewMode:      ViewConnections,
+		ctx:           ctx,
 	}
 }
 
@@ -31,23 +46,97 @@ func (p *ConnectionsPanel) SetSize(width, height int) {
 
 // Update handles key events for the connections panel
 func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
+	// Handle schema messages
+	switch msg := msg.(type) {
+	case components.SchemasLoadedMsg:
+		if p.schemaTree != nil {
+			p.schemaTree.HandleSchemasLoaded(msg.Schemas)
+		}
+		return nil
+	case components.SchemaObjectsLoadedMsg:
+		if p.schemaTree != nil {
+			p.schemaTree.HandleSchemaObjectsLoaded(msg.Schema, msg.Tables, msg.Views, msg.Functions)
+		}
+		return nil
+	case components.TableColumnsLoadedMsg:
+		if p.schemaTree != nil {
+			p.schemaTree.HandleTableColumnsLoaded(msg.Schema, msg.Table, msg.Columns)
+		}
+		return nil
+	case components.SchemaErrorMsg:
+		// Handle error - could add error display
+		return nil
+	}
+
+	// Handle keyboard events
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		connNames := p.getConnectionsInDisplayOrder()
-		if len(connNames) == 0 {
+		// Toggle between connections and schema view
+		if msg.String() == "s" && p.viewMode == ViewConnections {
+			// Check if we have an active connection
+			activeConn, err := p.connMgr.GetActive()
+			if err == nil && activeConn.Status() == db.StatusConnected {
+				p.viewMode = ViewSchema
+				p.schemaTree = components.NewSchemaTree(activeConn)
+				// Calculate visible rows (leave space for header)
+				visibleRows := p.height - 4
+				if visibleRows < 5 {
+					visibleRows = 5
+				}
+				p.schemaTree.SetMaxVisibleRows(visibleRows)
+				return p.schemaTree.LoadSchemas(p.ctx)
+			}
 			return nil
 		}
 
-		switch msg.String() {
-		case "j", "down":
-			// Move selection down
-			if p.selectedIndex < len(connNames)-1 {
-				p.selectedIndex++
+		if msg.String() == "esc" && p.viewMode == ViewSchema {
+			p.viewMode = ViewConnections
+			p.schemaTree = nil
+			return nil
+		}
+
+		// Route events based on view mode
+		if p.viewMode == ViewSchema && p.schemaTree != nil {
+			switch msg.String() {
+			case "j", "down":
+				p.schemaTree.MoveDown()
+			case "k", "up":
+				p.schemaTree.MoveUp()
+			case "enter", " ":
+				return p.schemaTree.Toggle(p.ctx)
+			case "p":
+				// Generate preview query for selected table
+				selected := p.schemaTree.GetSelected()
+				if selected != nil && selected.Type == "table" {
+					return func() tea.Msg {
+						return TablePreviewMsg{
+							Schema: selected.Schema,
+							Table:  selected.Name,
+						}
+					}
+				}
 			}
-		case "k", "up":
-			// Move selection up
-			if p.selectedIndex > 0 {
-				p.selectedIndex--
+			return nil
+		}
+
+		// Connections view navigation
+		if p.viewMode == ViewConnections {
+			connNames := p.getConnectionsInDisplayOrder()
+			if len(connNames) == 0 {
+				return nil
+			}
+
+			switch msg.String() {
+			case "j", "down":
+				// Move selection down
+				if p.selectedIndex < len(connNames)-1 {
+					p.selectedIndex++
+				}
+			case "k", "up":
+				// Move selection up
+				if p.selectedIndex > 0 {
+					p.selectedIndex--
+				}
 			}
 		}
 	}
@@ -102,6 +191,15 @@ func (p *ConnectionsPanel) View() string {
 		return ""
 	}
 
+	// Render schema view if active
+	if p.viewMode == ViewSchema && p.schemaTree != nil {
+		content := "SCHEMA EXPLORER\n"
+		content += "Press [Esc] to return to connections\n\n"
+		content += p.schemaTree.View()
+		return content
+	}
+
+	// Render connections view
 	content := "CONNECTIONS\n\n"
 
 	// Get connections in display order
@@ -205,5 +303,14 @@ func (p *ConnectionsPanel) View() string {
 
 // Help returns help text for the connections panel
 func (p *ConnectionsPanel) Help() string {
-	return "[a] add  [d] delete  [e] edit  [Enter] connect"
+	if p.viewMode == ViewSchema {
+		return "[j/k] navigate  [Enter/Space] expand  [Esc] back  [p] preview table"
+	}
+	return "[a] add  [d] delete  [e] edit  [Enter] connect  [s] schema"
+}
+
+// TablePreviewMsg is sent when user requests a table preview
+type TablePreviewMsg struct {
+	Schema string
+	Table  string
 }

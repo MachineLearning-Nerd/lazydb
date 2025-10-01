@@ -70,6 +70,23 @@ Press '3' → Results panel
 Or use Tab/Shift+Tab to cycle through panels
 ```
 
+### Explore Database Schema
+
+```
+Press '1' → Focus Connections panel
+Press 's' → Open Schema Explorer
+Use j/k → Navigate schemas, tables, views, functions
+Press Enter/Space → Expand/collapse nodes
+Press 'p' on a table → Generate preview query (SELECT * LIMIT 10)
+Press Esc → Return to connections
+```
+
+The schema explorer shows:
+- 📂 Schemas - All available schemas
+- 📊 Tables - All tables with column details
+- 👁 Views - Database views
+- ⚙ Functions - Stored procedures and functions
+
 ### Edit Complex Queries in Neovim
 
 ```
@@ -169,6 +186,13 @@ Connections:
   a     → Add
   e     → Edit
   d     → Delete
+  s     → Schema Explorer
+
+Schema Explorer:
+  j/k          → Navigate
+  Enter/Space  → Expand/collapse
+  p            → Preview table
+  Esc          → Back to connections
 
 Editor:
   Ctrl+R → Execute
@@ -186,14 +210,16 @@ Here's a typical workflow:
 
 1. **Morning**: Launch LazyDB
 2. **Connect**: Press `1`, select connection, `Enter`
-3. **Quick Query**: Press `2`, type `SELECT * FROM users LIMIT 10;`, `Ctrl+R`
-4. **Complex Query**: Press `Ctrl+E`, write query in Neovim, save and quit
-5. **Execute**: Query auto-loads, press `Ctrl+R`
-6. **Browse Results**: Press `3`, use j/k to scroll
-7. **New Connection**: Press `1`, `a`, add staging database
-8. **Switch**: Use j/k to select staging, `Enter` to connect
-9. **Help**: Press `?` to find the query for listing all tables
-10. **Copy & Run**: Navigate to query, `Enter` to copy, `Ctrl+R` to execute
+3. **Explore Schema**: Press `s` to open schema explorer
+4. **Navigate**: Use j/k to browse schemas and tables
+5. **Preview Table**: Navigate to a table, press `p` to preview
+6. **Execute**: Press `Ctrl+R` to run the preview query
+7. **Browse Results**: Press `3`, use j/k to scroll
+8. **Complex Query**: Press `2`, `Ctrl+E`, write query in Neovim
+9. **New Connection**: Press `1`, `a`, add staging database
+10. **Switch**: Use j/k to select staging, `Enter` to connect
+11. **Help**: Press `?` to find common PostgreSQL queries
+12. **Copy & Run**: Navigate to query, `Enter` to copy, `Ctrl+R` to execute
 
 ### Security Best Practices
 
