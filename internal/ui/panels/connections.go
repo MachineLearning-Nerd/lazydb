@@ -33,7 +33,7 @@ func (p *ConnectionsPanel) SetSize(width, height int) {
 func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		connNames := p.connMgr.ListConnections()
+		connNames := p.getConnectionsInDisplayOrder()
 		if len(connNames) == 0 {
 			return nil
 		}
@@ -54,9 +54,42 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// getConnectionsInDisplayOrder returns connections in the order they're displayed (grouped by environment)
+func (p *ConnectionsPanel) getConnectionsInDisplayOrder() []string {
+	connNames := p.connMgr.ListConnections()
+
+	// Group connections by environment
+	envGroups := make(map[db.Environment][]string)
+	for _, name := range connNames {
+		conn, err := p.connMgr.GetConnection(name)
+		if err != nil {
+			continue
+		}
+		config := conn.Config()
+		env := config.Environment
+		if env == "" {
+			env = db.EnvDevelopment // Default to Development
+		}
+		envGroups[env] = append(envGroups[env], name)
+	}
+
+	// Build ordered list: Development, Staging, Production
+	var orderedConnections []string
+	envOrder := []db.Environment{db.EnvDevelopment, db.EnvStaging, db.EnvProduction}
+
+	for _, env := range envOrder {
+		connections, exists := envGroups[env]
+		if exists {
+			orderedConnections = append(orderedConnections, connections...)
+		}
+	}
+
+	return orderedConnections
+}
+
 // GetSelectedConnection returns the name of the currently selected connection
 func (p *ConnectionsPanel) GetSelectedConnection() string {
-	connNames := p.connMgr.ListConnections()
+	connNames := p.getConnectionsInDisplayOrder()
 	if len(connNames) == 0 || p.selectedIndex >= len(connNames) {
 		return ""
 	}
@@ -71,25 +104,25 @@ func (p *ConnectionsPanel) View() string {
 
 	content := "CONNECTIONS\n\n"
 
-	// List all connections
-	connNames := p.connMgr.ListConnections()
+	// Get connections in display order
+	orderedConnections := p.getConnectionsInDisplayOrder()
 	activeConn := p.connMgr.ActiveName()
 
 	// Clamp selectedIndex to valid range
-	if len(connNames) > 0 && p.selectedIndex >= len(connNames) {
-		p.selectedIndex = len(connNames) - 1
+	if len(orderedConnections) > 0 && p.selectedIndex >= len(orderedConnections) {
+		p.selectedIndex = len(orderedConnections) - 1
 	}
 	if p.selectedIndex < 0 {
 		p.selectedIndex = 0
 	}
 
-	if len(connNames) == 0 {
+	if len(orderedConnections) == 0 {
 		content += "No connections configured\n"
 		content += "\nPress 'a' to add a connection"
 	} else {
-		// Group connections by environment
+		// Group connections by environment for display
 		envGroups := make(map[db.Environment][]string)
-		for _, name := range connNames {
+		for _, name := range orderedConnections {
 			conn, err := p.connMgr.GetConnection(name)
 			if err != nil {
 				continue
