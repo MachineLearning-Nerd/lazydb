@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -26,7 +27,39 @@ func ExecuteQuery(ctx context.Context, conn *pgx.Conn, query string) QueryResult
 		Rows:    [][]string{},
 	}
 
-	// Execute the query
+	// Trim and normalize query
+	trimmedQuery := strings.TrimSpace(query)
+	upperQuery := strings.ToUpper(trimmedQuery)
+
+	// Check if it's a SELECT-like query (returns rows)
+	isSelectQuery := strings.HasPrefix(upperQuery, "SELECT") ||
+		strings.HasPrefix(upperQuery, "WITH") ||
+		strings.HasPrefix(upperQuery, "SHOW") ||
+		strings.HasPrefix(upperQuery, "EXPLAIN")
+
+	// Check if multiple statements (count semicolons, excluding trailing one)
+	queryWithoutTrailing := strings.TrimRight(trimmedQuery, "; \t\n")
+	isMultiStatement := strings.Count(queryWithoutTrailing, ";") > 0
+
+	// Use Exec for multiple statements or non-SELECT queries
+	if isMultiStatement || !isSelectQuery {
+		// Use Exec() which supports multiple statements via simple protocol
+		commandTag, err := conn.Exec(ctx, query)
+		if err != nil {
+			result.Error = err
+			result.ExecutionMs = time.Since(startTime).Milliseconds()
+			return result
+		}
+
+		// Return success message
+		result.Columns = []string{"status"}
+		result.Rows = [][]string{{fmt.Sprintf("Success: %s", commandTag.String())}}
+		result.RowCount = 1
+		result.ExecutionMs = time.Since(startTime).Milliseconds()
+		return result
+	}
+
+	// Use Query() for single SELECT statements
 	rows, err := conn.Query(ctx, query)
 	if err != nil {
 		result.Error = err
