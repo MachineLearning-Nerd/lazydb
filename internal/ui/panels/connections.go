@@ -236,6 +236,11 @@ func (p *ConnectionsPanel) GetSelectedConnection() string {
 	return connNames[p.selectedIndex]
 }
 
+// IsInSchemaSearchMode returns true if schema explorer is active and in search mode
+func (p *ConnectionsPanel) IsInSchemaSearchMode() bool {
+	return p.viewMode == ViewSchema && p.schemaTree != nil && p.schemaTree.IsSearchMode()
+}
+
 // View renders the connections panel
 func (p *ConnectionsPanel) View() string {
 	if p.width == 0 || p.height == 0 {
