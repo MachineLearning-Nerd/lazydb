@@ -2,14 +2,33 @@ package panels
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/MachineLearning-Nerd/lazydb/internal/config"
 	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 	"github.com/MachineLearning-Nerd/lazydb/internal/ui/components"
 )
+
+// logDebug writes to debug log file (simple append mode)
+func logDebug(format string, args ...interface{}) {
+	configDir, err := config.GetConfigDir()
+	if err != nil {
+		return
+	}
+	debugLogPath := filepath.Join(configDir, "debug.log")
+	f, err := os.OpenFile(debugLogPath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	msg := fmt.Sprintf(format, args...)
+	f.WriteString(msg + "\n")
+}
 
 // EditorMode represents the current editing mode
 type EditorMode int
@@ -83,8 +102,19 @@ func (p *EditorPanel) Update(msg tea.Msg) tea.Cmd {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		key := msg.String()
+
+		// DEBUG LOG 5: Show keys received in editor panel
+		if key == "=" || key == "-" || key == "[" || key == "]" {
+			modeStr := "NORMAL"
+			if p.mode == ModeInsert {
+				modeStr = "INSERT"
+			}
+			logDebug("[LOG5] EditorPanel received key='%s' mode=%s", key, modeStr)
+		}
+
 		// ESC always switches to normal mode
-		if msg.String() == "esc" {
+		if key == "esc" {
 			p.mode = ModeNormal
 			return nil
 		}
@@ -93,6 +123,10 @@ func (p *EditorPanel) Update(msg tea.Msg) tea.Cmd {
 		if p.mode == ModeNormal {
 			return p.handleNormalMode(msg)
 		} else {
+			// DEBUG: Show when keys are being consumed in INSERT mode
+			if key == "=" || key == "-" || key == "[" || key == "]" {
+				logDebug("[LOG5] INSERT mode - passing key='%s' to textarea (will be typed)", key)
+			}
 			// In insert mode, pass all keys to textarea
 			p.textarea, cmd = p.textarea.Update(msg)
 		}
