@@ -1,10 +1,14 @@
 package panels
 
 import (
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/MachineLearning-Nerd/lazydb/internal/db"
+	"github.com/MachineLearning-Nerd/lazydb/internal/ui/components"
 )
 
 // EditorMode represents the current editing mode
@@ -17,11 +21,16 @@ const (
 
 // EditorPanel represents the center panel for query editing
 type EditorPanel struct {
-	width     int
-	height    int
-	textarea  textarea.Model
-	mode      EditorMode
-	clipboard string // For yank/paste operations
+	width            int
+	height           int
+	textarea         textarea.Model
+	mode             EditorMode
+	clipboard        string // For yank/paste operations
+	highlighter      *components.SQLHighlighter
+	validator        *db.SQLValidator
+	validationResult db.ValidationResult
+	enableHighlight  bool
+	enableLinting    bool
 }
 
 // NewEditorPanel creates a new editor panel
@@ -36,10 +45,18 @@ func NewEditorPanel() *EditorPanel {
 	// Set some style preferences
 	ta.FocusedStyle.CursorLine = ta.FocusedStyle.CursorLine
 
+	// Initialize highlighter and validator
+	highlighter := components.NewSQLHighlighter()
+	validator := db.NewSQLValidator()
+
 	return &EditorPanel{
-		textarea:  ta,
-		mode:      ModeInsert, // Start in insert mode for easier use
-		clipboard: "",
+		textarea:        ta,
+		mode:            ModeInsert, // Start in insert mode for easier use
+		clipboard:       "",
+		highlighter:     highlighter,
+		validator:       validator,
+		enableHighlight: true,  // Enable by default
+		enableLinting:   true,  // Enable by default
 	}
 }
 
@@ -61,6 +78,9 @@ func (p *EditorPanel) SetSize(width, height int) {
 func (p *EditorPanel) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 
+	// Track if text changed for validation
+	oldValue := p.textarea.Value()
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// ESC always switches to normal mode
@@ -75,24 +95,28 @@ func (p *EditorPanel) Update(msg tea.Msg) tea.Cmd {
 		} else {
 			// In insert mode, pass all keys to textarea
 			p.textarea, cmd = p.textarea.Update(msg)
-			return cmd
 		}
 
 	case deleteLineMsg:
 		p.deleteLine()
-		return nil
 
 	case yankLineMsg:
 		p.yankLine()
-		return nil
 
 	case gotoFirstLineMsg:
 		p.moveCursorToStart()
-		return nil
+
+	default:
+		// For non-key messages, always update textarea
+		p.textarea, cmd = p.textarea.Update(msg)
 	}
 
-	// For non-key messages, always update textarea
-	p.textarea, cmd = p.textarea.Update(msg)
+	// Validate query if text changed and linting is enabled
+	newValue := p.textarea.Value()
+	if p.enableLinting && oldValue != newValue {
+		p.validationResult = p.validator.Validate(newValue)
+	}
+
 	return cmd
 }
 
@@ -282,6 +306,11 @@ func (p *EditorPanel) View() string {
 		return ""
 	}
 
+	// Styles
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)    // Red
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("46"))              // Green
+	statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true) // Gray
+
 	// Show mode indicator
 	modeIndicator := ""
 	if p.mode == ModeNormal {
@@ -290,8 +319,46 @@ func (p *EditorPanel) View() string {
 		modeIndicator = " -- INSERT --"
 	}
 
-	content := "QUERY EDITOR" + modeIndicator + "\n\n"
-	content += p.textarea.View()
+	// Status bar with query stats and validation
+	queryText := p.textarea.Value()
+	lineCount := len(strings.Split(queryText, "\n"))
+	charCount := len(queryText)
+
+	statusBar := ""
+	if p.enableLinting {
+		if !p.validationResult.Valid && len(p.validationResult.Errors) > 0 {
+			// Show error
+			err := p.validationResult.Errors[0]
+			statusBar = fmt.Sprintf(" %s Syntax Error (Line %d): %s",
+				errorStyle.Render("✗"),
+				err.Line,
+				err.Message)
+		} else if queryText != "" {
+			// Show success
+			statusBar = fmt.Sprintf(" %s Valid SQL", successStyle.Render("✓"))
+		}
+	}
+
+	statsInfo := statusStyle.Render(fmt.Sprintf(" | %d lines | %d chars", lineCount, charCount))
+
+	// Header
+	content := "QUERY EDITOR" + modeIndicator + statusBar + statsInfo + "\n\n"
+
+	// Get query text for display
+	editorView := p.textarea.View()
+
+	// Apply syntax highlighting if enabled
+	if p.enableHighlight && queryText != "" {
+		highlighted, err := p.highlighter.Highlight(queryText)
+		if err == nil {
+			// Replace textarea content with highlighted version
+			// We need to preserve the textarea structure but with highlighted content
+			lines := strings.Split(highlighted, "\n")
+			editorView = strings.Join(lines, "\n")
+		}
+	}
+
+	content += editorView
 
 	return content
 }
