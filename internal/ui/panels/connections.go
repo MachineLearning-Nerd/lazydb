@@ -119,20 +119,9 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 				case "enter", " ":
 					// Can still expand/collapse in search mode
 					return p.schemaTree.Toggle(p.ctx)
-				case "p":
-					// Preview table in search mode
-					selected := p.schemaTree.GetSelected()
-					if selected != nil && selected.Type == "table" {
-						return func() tea.Msg {
-							return TablePreviewMsg{
-								Schema: selected.Schema,
-								Table:  selected.Name,
-							}
-						}
-					}
-					return nil
 				default:
 					// Handle regular character input for search
+					// All printable characters (including p, r, etc.) go to search input
 					if len(msg.String()) == 1 && msg.Type == tea.KeyRunes {
 						p.schemaTree.AddSearchChar(rune(msg.String()[0]))
 					}
