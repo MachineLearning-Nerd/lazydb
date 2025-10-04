@@ -35,7 +35,7 @@ func DefaultKeybindings() KeybindingsConfig {
 		},
 		Global: GlobalKeybindings{
 			Help:         "?",
-			Quit:         "q",
+			Quit:         "ctrl+q",
 			ExecuteQuery: "ctrl+r",
 			SaveQuery:    "f2",
 			OpenNeovim:   "ctrl+e",

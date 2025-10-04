@@ -89,17 +89,16 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
-		if msg.String() == "esc" && p.viewMode == ViewSchema {
-			p.viewMode = ViewConnections
-			p.schemaTree = nil
-			return nil
-		}
-
 		// Route events based on view mode
 		if p.viewMode == ViewSchema && p.schemaTree != nil {
 			// STATE 1: Search Input Mode - actively typing search
 			if p.schemaTree.IsSearchMode() {
 				switch msg.String() {
+				case "q":
+					// Exit schema view, return to connections
+					p.viewMode = ViewConnections
+					p.schemaTree = nil
+					return nil
 				case "esc":
 					// Cancel search, return to normal mode
 					p.schemaTree.ClearSearch()
@@ -136,8 +135,13 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 			// STATE 2: Search Results Mode - filter active, can use commands
 			if p.schemaTree.IsSearchCommitted() {
 				switch msg.String() {
-				case "q", "esc":
-					// Clear search, return to normal mode with full list
+				case "q":
+					// Exit schema view, return to connections
+					p.viewMode = ViewConnections
+					p.schemaTree = nil
+					return nil
+				case "esc":
+					// Clear filter, return to normal mode with full list
 					p.schemaTree.ClearSearch()
 					return nil
 				case "/":
@@ -172,6 +176,11 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 
 			// STATE 3: Normal Mode - full list, all commands work
 			switch msg.String() {
+			case "q":
+				// Exit schema view, return to connections
+				p.viewMode = ViewConnections
+				p.schemaTree = nil
+				return nil
 			case "/":
 				// Enter search input mode
 				p.schemaTree.EnterSearchMode()
@@ -392,14 +401,14 @@ func (p *ConnectionsPanel) Help() string {
 	if p.viewMode == ViewSchema && p.schemaTree != nil {
 		// Search Input Mode - actively typing
 		if p.schemaTree.IsSearchMode() {
-			return "[type to search]  [Enter] commit  [Esc] cancel  [j/k] navigate"
+			return "[type to search]  [Enter] commit  [Esc] cancel  [q] exit view  [j/k] navigate"
 		}
 		// Search Results Mode - filter active, commands work
 		if p.schemaTree.IsSearchCommitted() {
-			return "[q/Esc] clear filter  [/] modify search  [j/k] navigate  [Enter] expand  [p] preview  [r] refresh"
+			return "[Esc] clear filter  [/] modify  [j/k] navigate  [Enter] expand  [p] preview  [r] refresh  [q] exit view"
 		}
 		// Normal Mode - full list
-		return "[j/k] navigate  [Enter/Space] expand  [/] search  [r] refresh  [p] preview  [Esc] back"
+		return "[/] search  [j/k] navigate  [Enter] expand  [p] preview  [r] refresh  [q] exit view"
 	}
 	return "[a] add  [d] delete  [e] edit  [Enter] connect  [s] schema"
 }

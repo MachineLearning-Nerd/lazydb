@@ -33,6 +33,7 @@ type SchemaTree struct {
 	searchMode      bool
 	searchTerm      string
 	searchCommitted bool // Search committed (results mode)
+	searchLoading   bool // Loading all schemas for search
 	matchCount      int
 }
 
@@ -390,7 +391,10 @@ func (st *SchemaTree) View() string {
 		searchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 		output += searchStyle.Render(fmt.Sprintf("🔍 Search: %s_", st.searchTerm)) // Show cursor
 
-		if st.matchCount > 0 {
+		if st.searchLoading {
+			loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+			output += " " + loadingStyle.Render("(Expanding all schemas...)")
+		} else if st.matchCount > 0 {
 			countStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 			output += " " + countStyle.Render(fmt.Sprintf("(%d matches)", st.matchCount))
 		} else if st.searchTerm != "" {
@@ -525,9 +529,13 @@ func (st *SchemaTree) EnterSearchMode() {
 	st.searchMode = true
 	st.searchTerm = ""
 	st.searchCommitted = false
+	st.searchLoading = true
 	st.matchCount = 0
 	st.selectedIndex = 0
 	st.scrollOffset = 0
+
+	// Auto-expand all nodes for deep search
+	st.expandAll(st.root)
 }
 
 // CommitSearch commits the search (enter key in search input mode)
@@ -544,6 +552,7 @@ func (st *SchemaTree) CommitSearch() {
 func (st *SchemaTree) ClearSearch() {
 	st.searchMode = false
 	st.searchCommitted = false
+	st.searchLoading = false
 	st.searchTerm = ""
 	st.matchCount = 0
 	st.selectedIndex = 0
@@ -555,6 +564,30 @@ func (st *SchemaTree) ClearSearch() {
 // This is for backwards compatibility (now an alias for ClearSearch)
 func (st *SchemaTree) ExitSearchMode() {
 	st.ClearSearch()
+}
+
+// expandAll recursively expands all nodes for deep search
+func (st *SchemaTree) expandAll(node *SchemaNode) {
+	if node.Type == "root" {
+		for _, child := range node.Children {
+			st.expandAll(child)
+		}
+		return
+	}
+
+	// Expand this node
+	node.Expanded = true
+
+	// Recursively expand children
+	for _, child := range node.Children {
+		st.expandAll(child)
+	}
+
+	// After expanding all, rebuild list and turn off loading
+	if node == st.root {
+		st.searchLoading = false
+		st.rebuildFilteredList()
+	}
 }
 
 // AddSearchChar appends a character to the search term and rebuilds the filtered list
