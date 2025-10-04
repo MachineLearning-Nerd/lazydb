@@ -97,31 +97,35 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 
 		// Route events based on view mode
 		if p.viewMode == ViewSchema && p.schemaTree != nil {
-			// Check if in search mode
+			// STATE 1: Search Input Mode - actively typing search
 			if p.schemaTree.IsSearchMode() {
 				switch msg.String() {
 				case "esc":
-					// Exit search mode
-					p.schemaTree.ExitSearchMode()
+					// Cancel search, return to normal mode
+					p.schemaTree.ClearSearch()
+					return nil
+				case "enter":
+					// Commit search, enter results mode
+					p.schemaTree.CommitSearch()
 					return nil
 				case "backspace":
 					// Delete last character
 					p.schemaTree.DeleteSearchChar()
 					return nil
 				case "j", "down":
-					// Navigate through filtered results
+					// Navigate through filtered results while typing
 					p.schemaTree.MoveDown()
 					return nil
 				case "k", "up":
-					// Navigate through filtered results
+					// Navigate through filtered results while typing
 					p.schemaTree.MoveUp()
 					return nil
-				case "enter", " ":
-					// Can still expand/collapse in search mode
+				case " ":
+					// Space can expand/collapse in search mode
 					return p.schemaTree.Toggle(p.ctx)
 				default:
 					// Handle regular character input for search
-					// All printable characters (including p, r, etc.) go to search input
+					// All printable characters go to search input
 					if len(msg.String()) == 1 && msg.Type == tea.KeyRunes {
 						p.schemaTree.AddSearchChar(rune(msg.String()[0]))
 					}
@@ -129,10 +133,47 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 				}
 			}
 
-			// Normal navigation mode (not in search)
+			// STATE 2: Search Results Mode - filter active, can use commands
+			if p.schemaTree.IsSearchCommitted() {
+				switch msg.String() {
+				case "q", "esc":
+					// Clear search, return to normal mode with full list
+					p.schemaTree.ClearSearch()
+					return nil
+				case "/":
+					// Re-enter search input mode to modify search
+					p.schemaTree.EnterSearchMode()
+					return nil
+				case "r":
+					// Refresh schema data from database
+					return p.schemaTree.RefreshSchemas(p.ctx)
+				case "j", "down":
+					p.schemaTree.MoveDown()
+					return nil
+				case "k", "up":
+					p.schemaTree.MoveUp()
+					return nil
+				case "enter", " ":
+					return p.schemaTree.Toggle(p.ctx)
+				case "p":
+					// Preview works in results mode
+					selected := p.schemaTree.GetSelected()
+					if selected != nil && selected.Type == "table" {
+						return func() tea.Msg {
+							return TablePreviewMsg{
+								Schema: selected.Schema,
+								Table:  selected.Name,
+							}
+						}
+					}
+				}
+				return nil
+			}
+
+			// STATE 3: Normal Mode - full list, all commands work
 			switch msg.String() {
 			case "/":
-				// Enter search mode
+				// Enter search input mode
 				p.schemaTree.EnterSearchMode()
 				return nil
 			case "r":
@@ -348,11 +389,16 @@ func (p *ConnectionsPanel) View() string {
 
 // Help returns help text for the connections panel
 func (p *ConnectionsPanel) Help() string {
-	if p.viewMode == ViewSchema {
-		// Check if in search mode
-		if p.schemaTree != nil && p.schemaTree.IsSearchMode() {
-			return "[type to search]  [Esc] clear search  [j/k] navigate  [Enter] expand  [p] preview"
+	if p.viewMode == ViewSchema && p.schemaTree != nil {
+		// Search Input Mode - actively typing
+		if p.schemaTree.IsSearchMode() {
+			return "[type to search]  [Enter] commit  [Esc] cancel  [j/k] navigate"
 		}
+		// Search Results Mode - filter active, commands work
+		if p.schemaTree.IsSearchCommitted() {
+			return "[q/Esc] clear filter  [/] modify search  [j/k] navigate  [Enter] expand  [p] preview  [r] refresh"
+		}
+		// Normal Mode - full list
 		return "[j/k] navigate  [Enter/Space] expand  [/] search  [r] refresh  [p] preview  [Esc] back"
 	}
 	return "[a] add  [d] delete  [e] edit  [Enter] connect  [s] schema"

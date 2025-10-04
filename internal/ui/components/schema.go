@@ -22,17 +22,18 @@ type SchemaNode struct {
 
 // SchemaTree manages the schema exploration tree
 type SchemaTree struct {
-	conn           db.Connection
-	root           *SchemaNode
-	flatList       []*SchemaNode // Flat list for navigation
-	selectedIndex  int
-	loading        bool
-	err            error
-	maxVisibleRows int
-	scrollOffset   int
-	searchMode     bool
-	searchTerm     string
-	matchCount     int
+	conn            db.Connection
+	root            *SchemaNode
+	flatList        []*SchemaNode // Flat list for navigation
+	selectedIndex   int
+	loading         bool
+	err             error
+	maxVisibleRows  int
+	scrollOffset    int
+	searchMode      bool
+	searchTerm      string
+	searchCommitted bool // Search committed (results mode)
+	matchCount      int
 }
 
 // NewSchemaTree creates a new schema tree
@@ -143,8 +144,8 @@ func (st *SchemaTree) Toggle(ctx context.Context) tea.Cmd {
 		}
 	}
 
-	// Rebuild list - use filtered version if in search mode
-	if st.searchMode {
+	// Rebuild list - use filtered version if in search mode or results mode
+	if st.searchMode || st.searchCommitted {
 		st.rebuildFilteredList()
 	} else {
 		st.rebuildFlatList()
@@ -197,8 +198,8 @@ func (st *SchemaTree) HandleSchemasLoaded(schemas []string) {
 			Children: []*SchemaNode{},
 		}
 	}
-	// Preserve search mode if active
-	if st.searchMode {
+	// Preserve search/filter if active
+	if st.searchMode || st.searchCommitted {
 		st.rebuildFilteredList()
 	} else {
 		st.rebuildFlatList()
@@ -383,10 +384,11 @@ func (st *SchemaTree) View() string {
 
 	var output string
 
-	// Show search bar if in search mode
+	// Show search bar based on mode
 	if st.searchMode {
+		// Search Input Mode - actively typing
 		searchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-		output += searchStyle.Render(fmt.Sprintf("🔍 Search: %s", st.searchTerm))
+		output += searchStyle.Render(fmt.Sprintf("🔍 Search: %s_", st.searchTerm)) // Show cursor
 
 		if st.matchCount > 0 {
 			countStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
@@ -396,10 +398,20 @@ func (st *SchemaTree) View() string {
 			output += " " + noMatchStyle.Render("(no matches)")
 		}
 		output += "\n\n"
+	} else if st.searchCommitted {
+		// Search Results Mode - filter active, can use commands
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
+		output += filterStyle.Render(fmt.Sprintf("🔍 Filter: %s", st.searchTerm))
+
+		if st.matchCount > 0 {
+			countStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+			output += " " + countStyle.Render(fmt.Sprintf("(%d matches)", st.matchCount))
+		}
+		output += "\n\n"
 	}
 
 	if len(st.flatList) == 0 {
-		if st.searchMode && st.searchTerm != "" {
+		if (st.searchMode || st.searchCommitted) && st.searchTerm != "" {
 			return output + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("No matches found")
 		}
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("No schemas loaded")
@@ -503,23 +515,46 @@ func (st *SchemaTree) IsSearchMode() bool {
 	return st.searchMode
 }
 
+// IsSearchCommitted returns true if search is committed (in results mode)
+func (st *SchemaTree) IsSearchCommitted() bool {
+	return st.searchCommitted
+}
+
 // EnterSearchMode activates search mode and clears the search term
 func (st *SchemaTree) EnterSearchMode() {
 	st.searchMode = true
 	st.searchTerm = ""
+	st.searchCommitted = false
 	st.matchCount = 0
 	st.selectedIndex = 0
 	st.scrollOffset = 0
 }
 
-// ExitSearchMode deactivates search mode and rebuilds the full list
-func (st *SchemaTree) ExitSearchMode() {
+// CommitSearch commits the search (enter key in search input mode)
+// Transitions from Search Input Mode to Search Results Mode
+func (st *SchemaTree) CommitSearch() {
+	if st.searchMode && st.searchTerm != "" {
+		st.searchMode = false      // Exit input mode
+		st.searchCommitted = true  // Enter results mode
+	}
+}
+
+// ClearSearch clears the search and returns to normal mode
+// Called by q or ESC in Search Results Mode
+func (st *SchemaTree) ClearSearch() {
 	st.searchMode = false
+	st.searchCommitted = false
 	st.searchTerm = ""
 	st.matchCount = 0
 	st.selectedIndex = 0
 	st.scrollOffset = 0
 	st.rebuildFlatList()
+}
+
+// ExitSearchMode deactivates search mode and rebuilds the full list
+// This is for backwards compatibility (now an alias for ClearSearch)
+func (st *SchemaTree) ExitSearchMode() {
+	st.ClearSearch()
 }
 
 // AddSearchChar appends a character to the search term and rebuilds the filtered list
