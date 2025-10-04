@@ -61,8 +61,12 @@ func NewEditorPanel() *EditorPanel {
 	ta.CharLimit = 10000 // Reasonable limit for SQL queries
 	ta.Focus()
 
-	// Set some style preferences
-	ta.FocusedStyle.CursorLine = ta.FocusedStyle.CursorLine
+	// Set cursor line style to make cursor more visible
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle().Background(lipgloss.Color("237"))
+	ta.FocusedStyle.Prompt = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+
+	// Make cursor itself bright and highly visible
+	ta.Cursor.Style = lipgloss.NewStyle().Background(lipgloss.Color("51")) // Bright cyan
 
 	// Initialize highlighter and validator
 	highlighter := components.NewSQLHighlighter()
@@ -381,12 +385,18 @@ func (p *EditorPanel) View() string {
 	// Get query text for display
 	editorView := p.textarea.View()
 
-	// Apply syntax highlighting if enabled
+	// Apply syntax highlighting with cursor if enabled
+	// Works in both Insert and Normal modes with visible cursor
 	if p.enableHighlight && queryText != "" {
-		highlighted, err := p.highlighter.Highlight(queryText)
+		// Get cursor position
+		cursorLine := p.textarea.Line()
+		lineInfo := p.textarea.LineInfo()
+		cursorCol := lineInfo.CharOffset
+
+		// Apply highlighting with cursor injection
+		highlighted, err := p.highlighter.HighlightWithCursor(queryText, cursorLine, cursorCol)
 		if err == nil {
-			// Replace textarea content with highlighted version
-			// We need to preserve the textarea structure but with highlighted content
+			// Replace textarea content with highlighted version (includes cursor)
 			lines := strings.Split(highlighted, "\n")
 			editorView = strings.Join(lines, "\n")
 		}

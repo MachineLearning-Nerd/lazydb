@@ -8,6 +8,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/glamour"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/MachineLearning-Nerd/lazydb/internal/ai"
@@ -16,18 +17,21 @@ import (
 
 // AIAssistantPanel represents the AI assistant dialog
 type AIAssistantPanel struct {
-	visible      bool
-	input        textinput.Model
-	response     string
-	loading      bool
-	error        string
-	copyStatus   string // Feedback for copy operation
-	provider     ai.CLIProvider
-	conn         db.Connection
-	currentQuery string
-	viewport     viewport.Model
-	width        int
-	height       int
+	visible         bool
+	input           textinput.Model
+	response        string
+	sections        []ai.ResponseSection
+	selectedSection int // Current selected section (0-indexed)
+	loading         bool
+	error           string
+	copyStatus      string // Feedback for copy operation
+	provider        ai.CLIProvider
+	conn            db.Connection
+	currentQuery    string
+	viewport        viewport.Model
+	width           int
+	height          int
+	renderer        *glamour.TermRenderer
 }
 
 // NewAIAssistantPanel creates a new AI assistant panel
@@ -39,12 +43,21 @@ func NewAIAssistantPanel(provider ai.CLIProvider, conn db.Connection) *AIAssista
 
 	vp := viewport.New(60, 10)
 
+	// Initialize glamour renderer for markdown
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(60),
+	)
+
 	return &AIAssistantPanel{
-		visible:  false,
-		input:    ti,
-		provider: provider,
-		conn:     conn,
-		viewport: vp,
+		visible:         false,
+		input:           ti,
+		provider:        provider,
+		conn:            conn,
+		viewport:        vp,
+		renderer:        renderer,
+		sections:        []ai.ResponseSection{},
+		selectedSection: 0,
 	}
 }
 
@@ -53,6 +66,8 @@ func (p *AIAssistantPanel) Show(query string) {
 	p.visible = true
 	p.currentQuery = query
 	p.response = ""
+	p.sections = []ai.ResponseSection{}
+	p.selectedSection = 0
 	p.error = ""
 	p.copyStatus = ""
 	p.loading = false
@@ -123,18 +138,56 @@ func (p *AIAssistantPanel) Update(msg tea.Msg) tea.Cmd {
 				return p.invokeAI(task)
 			}
 		case "ctrl+c":
-			// Copy response to clipboard
+			// Copy entire response to clipboard
 			if p.response != "" {
 				err := clipboard.WriteAll(p.response)
 				if err != nil {
 					p.copyStatus = "⚠ Copy failed: clipboard not available"
 				} else {
-					p.copyStatus = "✓ Copied to clipboard"
+					p.copyStatus = "✓ Copied entire response to clipboard"
 				}
 			} else {
 				p.copyStatus = "⚠ No response to copy"
 			}
+			p.copyStatus += " "
 			return nil
+		case "c", "n", "p":
+			// Handle section navigation only when viewing response
+			// Otherwise, pass to input so user can type these letters
+			if p.response != "" && len(p.sections) > 0 {
+				switch msg.String() {
+				case "c":
+					// Copy current section only
+					section := p.sections[p.selectedSection]
+					err := clipboard.WriteAll(section.Content)
+					if err != nil {
+						p.copyStatus = "⚠ Copy failed: clipboard not available"
+					} else {
+						p.copyStatus = fmt.Sprintf("✓ Copied section %d (%s)", section.Number, ai.FormatSectionTitle(section))
+					}
+				case "n":
+					// Next section
+					if p.selectedSection < len(p.sections)-1 {
+						p.selectedSection++
+						p.updateViewport()
+						p.copyStatus = ""
+					}
+				case "p":
+					// Previous section
+					if p.selectedSection > 0 {
+						p.selectedSection--
+						p.updateViewport()
+						p.copyStatus = ""
+					}
+				}
+				return nil
+			} else {
+				// No response yet - pass to input so user can type
+				if !p.loading {
+					p.input, cmd = p.input.Update(msg)
+				}
+				return cmd
+			}
 		case "up", "down", "pgup", "pgdown":
 			// Scroll viewport
 			p.viewport, cmd = p.viewport.Update(msg)
@@ -152,7 +205,11 @@ func (p *AIAssistantPanel) Update(msg tea.Msg) tea.Cmd {
 			p.error = msg.Err.Error()
 		} else {
 			p.response = msg.Response
-			p.viewport.SetContent(p.response)
+			// Parse response into sections
+			p.sections = ai.ParseResponse(msg.Response)
+			p.selectedSection = 0
+			// Update viewport with formatted response
+			p.updateViewport()
 		}
 		return nil
 	}
@@ -198,6 +255,75 @@ func (p *AIAssistantPanel) invokeAI(task string) tea.Cmd {
 			Response: response,
 		}
 	}
+}
+
+// updateViewport updates the viewport content with formatted sections
+func (p *AIAssistantPanel) updateViewport() {
+	if len(p.sections) == 0 {
+		p.viewport.SetContent(p.response)
+		return
+	}
+
+	var content strings.Builder
+
+	for i, section := range p.sections {
+		isSelected := (i == p.selectedSection)
+
+		// Section header with indicator
+		sectionTitle := ai.FormatSectionTitle(section)
+		indicator := "□"
+		if isSelected {
+			indicator = "▶"
+		}
+
+		headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
+		if isSelected {
+			headerStyle = headerStyle.Foreground(lipgloss.Color("46")) // Green for selected
+		}
+
+		header := fmt.Sprintf("%s Section %d: %s", indicator, section.Number, sectionTitle)
+		content.WriteString(headerStyle.Render(header))
+		content.WriteString("\n")
+
+		// Render section content with glamour for code/markdown
+		var sectionContent string
+		if section.Type == "code" || section.Type == "query" {
+			// Render code block with syntax highlighting
+			codeBlock := fmt.Sprintf("```sql\n%s\n```", section.Content)
+			if p.renderer != nil {
+				rendered, err := p.renderer.Render(codeBlock)
+				if err == nil {
+					sectionContent = rendered
+				} else {
+					sectionContent = section.Content
+				}
+			} else {
+				sectionContent = section.Content
+			}
+		} else {
+			// Render as markdown
+			if p.renderer != nil {
+				rendered, err := p.renderer.Render(section.Content)
+				if err == nil {
+					sectionContent = rendered
+				} else {
+					sectionContent = section.Content
+				}
+			} else {
+				sectionContent = section.Content
+			}
+		}
+
+		content.WriteString(sectionContent)
+		content.WriteString("\n")
+
+		// Add spacing between sections
+		if i < len(p.sections)-1 {
+			content.WriteString("\n")
+		}
+	}
+
+	p.viewport.SetContent(content.String())
 }
 
 // View renders the AI assistant panel
@@ -278,8 +404,12 @@ func (p *AIAssistantPanel) View() string {
 	// Help text
 	if p.loading {
 		content.WriteString(labelStyle.Render("[Esc] Cancel"))
+	} else if p.response != "" && len(p.sections) > 0 {
+		// Show section navigation help
+		content.WriteString(labelStyle.Render("[n/p] Sections  [c] Copy §  [Ctrl+C] Copy All  [↑/↓] Scroll  [Esc] Close"))
 	} else if p.response != "" {
-		content.WriteString(labelStyle.Render("[↑/↓] Scroll  [Esc] Close  [Ctrl+C] Copy"))
+		// No sections, show basic help
+		content.WriteString(labelStyle.Render("[↑/↓] Scroll  [Ctrl+C] Copy  [Esc] Close"))
 	} else {
 		content.WriteString(labelStyle.Render("[Enter] Submit  [Esc] Close"))
 	}
