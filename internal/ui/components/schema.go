@@ -534,8 +534,7 @@ func (st *SchemaTree) EnterSearchMode() {
 	st.selectedIndex = 0
 	st.scrollOffset = 0
 
-	// Auto-expand all nodes for deep search
-	st.expandAll(st.root)
+	// Loading will be triggered from connections panel via ExpandAndLoadAllSchemas
 }
 
 // CommitSearch commits the search (enter key in search input mode)
@@ -566,28 +565,122 @@ func (st *SchemaTree) ExitSearchMode() {
 	st.ClearSearch()
 }
 
-// expandAll recursively expands all nodes for deep search
-func (st *SchemaTree) expandAll(node *SchemaNode) {
-	if node.Type == "root" {
-		for _, child := range node.Children {
-			st.expandAll(child)
+// ExpandAndLoadAllSchemas loads all schema objects from database for deep search
+func (st *SchemaTree) ExpandAndLoadAllSchemas(ctx context.Context) tea.Cmd {
+	return func() tea.Msg {
+		// Loop through all schema nodes
+		for _, schemaNode := range st.root.Children {
+			if schemaNode.Type != "schema" {
+				continue
+			}
+
+			// Skip if already loaded
+			if len(schemaNode.Children) > 0 {
+				schemaNode.Expanded = true
+				continue
+			}
+
+			// Load tables, views, functions from database
+			tables, err := st.conn.ListTables(ctx, schemaNode.Name)
+			if err != nil {
+				continue // Skip schemas with errors
+			}
+
+			views, err := st.conn.ListViews(ctx, schemaNode.Name)
+			if err != nil {
+				views = []db.SchemaObject{} // Continue with empty views
+			}
+
+			functions, err := st.conn.ListFunctions(ctx, schemaNode.Name)
+			if err != nil {
+				functions = []db.SchemaObject{} // Continue with empty functions
+			}
+
+			// Build children (same logic as HandleSchemaObjectsLoaded)
+			schemaNode.Children = []*SchemaNode{}
+
+			// Tables group
+			if len(tables) > 0 {
+				tablesNode := &SchemaNode{
+					Name:       fmt.Sprintf("Tables (%d)", len(tables)),
+					Type:       "tables",
+					Schema:     schemaNode.Name,
+					Expanded:   true, // Auto-expand for search
+					Children:   make([]*SchemaNode, len(tables)),
+					ParentType: "schema",
+				}
+				for i, table := range tables {
+					tablesNode.Children[i] = &SchemaNode{
+						Name:       table.Name,
+						Type:       "table",
+						Schema:     schemaNode.Name,
+						Expanded:   false, // Don't expand columns (too much data)
+						Children:   []*SchemaNode{},
+						ParentType: "tables",
+					}
+				}
+				schemaNode.Children = append(schemaNode.Children, tablesNode)
+			}
+
+			// Views group
+			if len(views) > 0 {
+				viewsNode := &SchemaNode{
+					Name:       fmt.Sprintf("Views (%d)", len(views)),
+					Type:       "views",
+					Schema:     schemaNode.Name,
+					Expanded:   true,
+					Children:   make([]*SchemaNode, len(views)),
+					ParentType: "schema",
+				}
+				for i, view := range views {
+					viewsNode.Children[i] = &SchemaNode{
+						Name:       view.Name,
+						Type:       "view",
+						Schema:     schemaNode.Name,
+						Expanded:   false,
+						Children:   []*SchemaNode{},
+						ParentType: "views",
+					}
+				}
+				schemaNode.Children = append(schemaNode.Children, viewsNode)
+			}
+
+			// Functions group
+			if len(functions) > 0 {
+				functionsNode := &SchemaNode{
+					Name:       fmt.Sprintf("Functions (%d)", len(functions)),
+					Type:       "functions",
+					Schema:     schemaNode.Name,
+					Expanded:   true,
+					Children:   make([]*SchemaNode, len(functions)),
+					ParentType: "schema",
+				}
+				for i, function := range functions {
+					functionsNode.Children[i] = &SchemaNode{
+						Name:       function.Name,
+						Type:       "function",
+						Schema:     schemaNode.Name,
+						Expanded:   false,
+						Children:   []*SchemaNode{},
+						ParentType: "functions",
+					}
+				}
+				schemaNode.Children = append(schemaNode.Children, functionsNode)
+			}
+
+			// Mark schema as expanded
+			schemaNode.Expanded = true
 		}
-		return
-	}
 
-	// Expand this node
-	node.Expanded = true
-
-	// Recursively expand children
-	for _, child := range node.Children {
-		st.expandAll(child)
+		// Return completion message
+		return SchemaExpandCompleteMsg{}
 	}
+}
 
-	// After expanding all, rebuild list and turn off loading
-	if node == st.root {
-		st.searchLoading = false
-		st.rebuildFilteredList()
-	}
+// SetLoadingComplete turns off loading indicator and rebuilds list
+func (st *SchemaTree) SetLoadingComplete() {
+	st.searchLoading = false
+	st.rebuildFilteredList()
 }
 
 // AddSearchChar appends a character to the search term and rebuilds the filtered list
@@ -715,3 +808,5 @@ type TableColumnsLoadedMsg struct {
 type SchemaErrorMsg struct {
 	Err error
 }
+
+type SchemaExpandCompleteMsg struct{}

@@ -63,6 +63,11 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 			p.schemaTree.HandleTableColumnsLoaded(msg.Schema, msg.Table, msg.Columns)
 		}
 		return nil
+	case components.SchemaExpandCompleteMsg:
+		if p.schemaTree != nil {
+			p.schemaTree.SetLoadingComplete()
+		}
+		return nil
 	case components.SchemaErrorMsg:
 		// Handle error - could add error display
 		return nil
@@ -184,7 +189,8 @@ func (p *ConnectionsPanel) Update(msg tea.Msg) tea.Cmd {
 			case "/":
 				// Enter search input mode
 				p.schemaTree.EnterSearchMode()
-				return nil
+				// Start loading all schema objects from database
+				return p.schemaTree.ExpandAndLoadAllSchemas(p.ctx)
 			case "r":
 				// Refresh schema data from database
 				return p.schemaTree.RefreshSchemas(p.ctx)
