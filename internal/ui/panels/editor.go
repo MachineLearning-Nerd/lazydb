@@ -57,7 +57,7 @@ func NewEditorPanel() *EditorPanel {
 	ta := textarea.New()
 	ta.Placeholder = "Enter SQL query here... (Press ESC for Vim Normal mode, i for Insert mode)"
 	ta.SetValue("SELECT * FROM pg_database;")
-	ta.ShowLineNumbers = true
+	ta.ShowLineNumbers = false // Disabled - we handle rendering ourselves
 	ta.CharLimit = 10000 // Reasonable limit for SQL queries
 	ta.Focus()
 
@@ -66,7 +66,9 @@ func NewEditorPanel() *EditorPanel {
 	ta.FocusedStyle.Prompt = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 
 	// Make cursor itself bright and highly visible
-	ta.Cursor.Style = lipgloss.NewStyle().Background(lipgloss.Color("51")) // Bright cyan
+	ta.Cursor.Style = lipgloss.NewStyle().Background(lipgloss.Color("51")).Foreground(lipgloss.Color("0")) // Bright cyan bg, black fg
+	ta.Cursor.Blink = true // Enable cursor blinking for extra visibility
+	ta.Cursor.SetChar("█") // Use solid block character
 
 	// Initialize highlighter and validator
 	highlighter := components.NewSQLHighlighter()
@@ -383,23 +385,35 @@ func (p *EditorPanel) View() string {
 	content := "QUERY EDITOR" + modeIndicator + statusBar + statsInfo + "\n\n"
 
 	// Get query text for display
-	editorView := p.textarea.View()
+	var editorView string
 
-	// Apply syntax highlighting with cursor if enabled
-	// Works in both Insert and Normal modes with visible cursor
-	if p.enableHighlight && queryText != "" {
-		// Get cursor position
-		cursorLine := p.textarea.Line()
-		lineInfo := p.textarea.LineInfo()
-		cursorCol := lineInfo.CharOffset
+	if p.enableHighlight {
+		if queryText == "" {
+			// Empty state: show styled placeholder with cursor
+			// Use same dark background and styling as non-empty state
+			placeholderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray text
+			placeholder := placeholderStyle.Render("Enter SQL query here... (Press ESC for Vim Normal mode, i for Insert mode)")
+			cursor := "\x1b[48;5;51m \x1b[0m" // Bright cyan cursor block
+			editorView = placeholder + cursor
+		} else {
+			// Non-empty state: apply highlighting with cursor (CORRECT - keep as is)
+			cursorLine := p.textarea.Line()
+			lineInfo := p.textarea.LineInfo()
+			cursorCol := lineInfo.CharOffset
 
-		// Apply highlighting with cursor injection
-		highlighted, err := p.highlighter.HighlightWithCursor(queryText, cursorLine, cursorCol)
-		if err == nil {
-			// Replace textarea content with highlighted version (includes cursor)
-			lines := strings.Split(highlighted, "\n")
-			editorView = strings.Join(lines, "\n")
+			highlighted, err := p.highlighter.HighlightWithCursor(queryText, cursorLine, cursorCol)
+			if err == nil {
+				// Replace textarea content with highlighted version (includes cursor)
+				lines := strings.Split(highlighted, "\n")
+				editorView = strings.Join(lines, "\n")
+			} else {
+				// Fallback to native textarea if highlighting fails
+				editorView = p.textarea.View()
+			}
 		}
+	} else {
+		// Highlighting disabled: use native textarea
+		editorView = p.textarea.View()
 	}
 
 	content += editorView
