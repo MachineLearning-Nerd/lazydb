@@ -441,6 +441,11 @@ func (p *EditorPanel) Blur() {
 	p.textarea.Blur()
 }
 
+// IsInInsertMode returns true if editor is in insert mode
+func (p *EditorPanel) IsInInsertMode() bool {
+	return p.mode == ModeInsert
+}
+
 // Help returns help text for the editor panel
 func (p *EditorPanel) Help() string {
 	if p.mode == ModeNormal {

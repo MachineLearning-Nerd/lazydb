@@ -40,10 +40,17 @@ func OpenInNeovimCmd(text string, conn db.Connection, injectSchema bool) tea.Cmd
 		// If error, just continue without schema context (silently fail)
 	}
 
-	// Combine schema context with query text
-	fileContent := text
+	// ALWAYS strip any existing schema context from text first
+	// This prevents accumulation (the stripping logic now correctly handles box-drawing chars)
+	cleanText := text
+	if injectSchema {
+		cleanText = ai.StripContextComments(text)
+	}
+
+	// Combine schema context with cleaned query text
+	fileContent := cleanText
 	if schemaContext != "" {
-		fileContent = schemaContext + text
+		fileContent = schemaContext + cleanText
 	}
 
 	// Create a temporary file

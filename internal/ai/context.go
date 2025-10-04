@@ -380,8 +380,10 @@ func StripContextComments(sql string) string {
 	inContext := false
 
 	for _, line := range lines {
-		// Detect start of context
-		if strings.Contains(line, "LAZYDB SCHEMA CONTEXT") {
+		// Detect start of context (look for box-drawing header or text marker)
+		// This catches the top border line and prevents accumulation
+		if !inContext && (strings.Contains(line, "-- ╔") || strings.Contains(line, "-- ║") ||
+			strings.Contains(line, "-- ╚") || strings.Contains(line, "LAZYDB SCHEMA CONTEXT")) {
 			inContext = true
 			continue
 		}
@@ -398,6 +400,17 @@ func StripContextComments(sql string) string {
 		}
 
 		result = append(result, line)
+	}
+
+	// Remove all leading comment-only lines (leftover from context)
+	// This prevents accumulation of blank "--" lines
+	for len(result) > 0 {
+		trimmed := strings.TrimSpace(result[0])
+		if trimmed == "" || trimmed == "--" {
+			result = result[1:] // Remove leading blank or comment-only line
+		} else {
+			break
+		}
 	}
 
 	// Join and trim leading whitespace
