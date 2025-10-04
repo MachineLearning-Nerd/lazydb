@@ -7,6 +7,7 @@ func DefaultConfig() *Config {
 		Keybindings: DefaultKeybindings(),
 		UI:          DefaultUIConfig(),
 		Theme:       DefaultThemeConfig(),
+		AI:          DefaultAIConfig(),
 	}
 }
 
@@ -39,6 +40,7 @@ func DefaultKeybindings() KeybindingsConfig {
 			ExecuteQuery: "ctrl+r",
 			SaveQuery:    "f2",
 			OpenNeovim:   "ctrl+e",
+			AIAssistant:  "ctrl+a",
 		},
 		Connections: ConnectionsKeybindings{
 			Add:            "a",
@@ -79,5 +81,18 @@ func DefaultThemeConfig() ThemeConfig {
 		Name:               "monokai",
 		SyntaxHighlighting: true,
 		SQLLinting:         true,
+	}
+}
+
+// DefaultAIConfig returns the default AI configuration
+func DefaultAIConfig() *AIConfig {
+	return &AIConfig{
+		Enabled:          true,
+		CLITool:          "claude-cli", // Default to claude-cli, will auto-detect if not available
+		InjectInNeovim:   true,
+		MaxTables:        50,
+		IncludeRowCounts: false,
+		IncludeIndexes:   true,
+		ContextFormat:    "comments",
 	}
 }

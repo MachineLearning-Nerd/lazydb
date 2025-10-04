@@ -1,12 +1,15 @@
 package editor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/MachineLearning-Nerd/lazydb/internal/ai"
+	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 )
 
 // IsNvimAvailable checks if Neovim is installed and available
@@ -17,7 +20,8 @@ func IsNvimAvailable() bool {
 
 // OpenInNeovimCmd creates a Bubbletea command to open Neovim
 // Returns a tea.Cmd that will suspend the TUI and launch Neovim
-func OpenInNeovimCmd(text string) tea.Cmd {
+// If conn is provided, schema context will be injected as SQL comments
+func OpenInNeovimCmd(text string, conn db.Connection, injectSchema bool) tea.Cmd {
 	// Check if Neovim is available
 	if !IsNvimAvailable() {
 		return func() tea.Msg {
@@ -25,8 +29,25 @@ func OpenInNeovimCmd(text string) tea.Cmd {
 		}
 	}
 
+	// Build schema context if requested and connection is available
+	var schemaContext string
+	if injectSchema && conn != nil && conn.Status() == db.StatusConnected {
+		ctx := context.Background()
+		schemaCtx, err := ai.BuildSchemaContext(ctx, conn, 50, true)
+		if err == nil {
+			schemaContext = schemaCtx.FormatAsComments()
+		}
+		// If error, just continue without schema context (silently fail)
+	}
+
+	// Combine schema context with query text
+	fileContent := text
+	if schemaContext != "" {
+		fileContent = schemaContext + text
+	}
+
 	// Create a temporary file
-	tempFile, err := createTempFile(text)
+	tempFile, err := createTempFile(fileContent)
 	if err != nil {
 		return func() tea.Msg {
 			return NvimErrorMsg{Err: fmt.Errorf("failed to create temp file: %w", err)}
@@ -50,6 +71,11 @@ func OpenInNeovimCmd(text string) tea.Cmd {
 
 		if err != nil {
 			return NvimErrorMsg{Err: fmt.Errorf("failed to read edited file: %w", err)}
+		}
+
+		// Strip schema context comments before returning
+		if injectSchema && schemaContext != "" {
+			editedText = ai.StripContextComments(editedText)
 		}
 
 		return NvimSuccessMsg{Text: editedText}

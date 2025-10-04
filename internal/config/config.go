@@ -6,6 +6,7 @@ type Config struct {
 	Keybindings KeybindingsConfig `yaml:"keybindings"`
 	UI          UIConfig          `yaml:"ui"`
 	Theme       ThemeConfig       `yaml:"theme"`
+	AI          *AIConfig         `yaml:"ai,omitempty"`
 }
 
 // KeybindingsConfig contains all keybinding configurations
@@ -51,6 +52,7 @@ type GlobalKeybindings struct {
 	ExecuteQuery string `yaml:"execute_query"`
 	SaveQuery    string `yaml:"save_query"`
 	OpenNeovim   string `yaml:"open_neovim"`
+	AIAssistant  string `yaml:"ai_assistant"`
 }
 
 // ConnectionsKeybindings for connections panel
@@ -93,4 +95,15 @@ type ThemeConfig struct {
 	Name               string `yaml:"name"`
 	SyntaxHighlighting bool   `yaml:"syntax_highlighting"`
 	SQLLinting         bool   `yaml:"sql_linting"`
+}
+
+// AIConfig contains AI assistant settings
+type AIConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	CLITool          string `yaml:"cli_tool"` // copilot-cli|claude-cli|sgpt|mods|llm
+	InjectInNeovim   bool   `yaml:"inject_in_neovim"`
+	MaxTables        int    `yaml:"max_tables"`
+	IncludeRowCounts bool   `yaml:"include_row_counts"`
+	IncludeIndexes   bool   `yaml:"include_indexes"`
+	ContextFormat    string `yaml:"context_format"` // comments|markdown|minimal
 }
