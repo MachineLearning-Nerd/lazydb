@@ -111,8 +111,12 @@ func main() {
 	basicTools := tools.NewBasicTools(conn)
 	basicTools.Register(mcpServer.GetRegistry())
 
+	// Register advanced tools
+	advancedTools := tools.NewAdvancedTools(conn)
+	advancedTools.Register(mcpServer.GetRegistry())
+
 	if *verbose {
-		fmt.Fprintf(os.Stderr, "Registered %d tools\n", mcpServer.GetRegistry().Count())
+		fmt.Fprintf(os.Stderr, "Registered %d tools (5 basic + 16 advanced)\n", mcpServer.GetRegistry().Count())
 	}
 
 	// Setup context with cancellation
