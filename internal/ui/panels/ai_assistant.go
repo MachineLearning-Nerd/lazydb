@@ -32,10 +32,11 @@ type AIAssistantPanel struct {
 	width           int
 	height          int
 	renderer        *glamour.TermRenderer
+	useMCP          bool // If true, use MCP tools instead of injecting schema
 }
 
 // NewAIAssistantPanel creates a new AI assistant panel
-func NewAIAssistantPanel(provider ai.CLIProvider, conn db.Connection) *AIAssistantPanel {
+func NewAIAssistantPanel(provider ai.CLIProvider, conn db.Connection, useMCP bool) *AIAssistantPanel {
 	ti := textinput.New()
 	ti.Placeholder = "e.g., optimize this query for large datasets"
 	ti.CharLimit = 200
@@ -58,6 +59,7 @@ func NewAIAssistantPanel(provider ai.CLIProvider, conn db.Connection) *AIAssista
 		renderer:        renderer,
 		sections:        []ai.ResponseSection{},
 		selectedSection: 0,
+		useMCP:          useMCP,
 	}
 }
 
@@ -234,13 +236,25 @@ func (p *AIAssistantPanel) invokeAI(task string) tea.Cmd {
 			}
 		}
 
-		// Build schema context
+		// Build schema context (or skip if using MCP)
 		ctx := context.Background()
-		schemaCtx, err := ai.BuildSchemaContext(ctx, p.conn, 50, true)
-		if err != nil {
-			return AIResponseMsg{
-				Err: fmt.Errorf("failed to build schema context: %w", err),
+		var schemaCtx *ai.SchemaContext
+
+		if p.useMCP {
+			// MCP Mode: Create minimal schema context with UseMCP flag
+			schemaCtx = &ai.SchemaContext{
+				UseMCP: true,
 			}
+		} else {
+			// Legacy Mode: Build full schema context
+			var err error
+			schemaCtx, err = ai.BuildSchemaContext(ctx, p.conn, 50, true)
+			if err != nil {
+				return AIResponseMsg{
+					Err: fmt.Errorf("failed to build schema context: %w", err),
+				}
+			}
+			schemaCtx.UseMCP = false
 		}
 
 		// Invoke AI provider

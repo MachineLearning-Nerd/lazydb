@@ -106,4 +106,11 @@ type AIConfig struct {
 	IncludeRowCounts bool   `yaml:"include_row_counts"`
 	IncludeIndexes   bool   `yaml:"include_indexes"`
 	ContextFormat    string `yaml:"context_format"` // comments|markdown|minimal
+
+	// MCP Server Configuration
+	MCPEnabled       bool   `yaml:"mcp_enabled"`
+	MCPSmartTools    bool   `yaml:"mcp_smart_tools"`    // Enable AI-powered smart tools
+	MCPCacheEnabled  bool   `yaml:"mcp_cache_enabled"`
+	MCPMaxCacheSize  int64  `yaml:"mcp_max_cache_size"`
+	MCPAIProvider    string `yaml:"mcp_ai_provider"` // claude|gemini|openai
 }

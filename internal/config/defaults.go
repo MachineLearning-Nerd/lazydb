@@ -94,5 +94,12 @@ func DefaultAIConfig() *AIConfig {
 		IncludeRowCounts: false,
 		IncludeIndexes:   true,
 		ContextFormat:    "comments",
+
+		// MCP Server defaults
+		MCPEnabled:      true,
+		MCPSmartTools:   true,
+		MCPCacheEnabled: true,
+		MCPMaxCacheSize: 104857600, // 100MB
+		MCPAIProvider:   "claude",
 	}
 }

@@ -259,3 +259,18 @@ func (p *PostgresConnection) GetTableColumns(ctx context.Context, schema, table 
 
 	return columns, rows.Err()
 }
+
+// ExecuteQuery executes a SQL query and returns the results
+func (p *PostgresConnection) ExecuteQuery(ctx context.Context, query string) (QueryResult, error) {
+	if p.conn == nil {
+		return QueryResult{}, fmt.Errorf("not connected to database")
+	}
+
+	result := ExecuteQuery(ctx, p.conn, query)
+	if result.Error != nil {
+		return result, result.Error
+	}
+
+	return result, nil
+}
+

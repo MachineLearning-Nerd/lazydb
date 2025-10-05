@@ -81,6 +81,9 @@ type Connection interface {
 	ListViews(ctx context.Context, schema string) ([]SchemaObject, error)
 	ListFunctions(ctx context.Context, schema string) ([]SchemaObject, error)
 	GetTableColumns(ctx context.Context, schema, table string) ([]TableColumn, error)
+
+	// Query execution
+	ExecuteQuery(ctx context.Context, query string) (QueryResult, error)
 }
 
 // ConnectionManager manages multiple database connections

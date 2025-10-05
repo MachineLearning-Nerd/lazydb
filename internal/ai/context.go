@@ -14,6 +14,7 @@ type SchemaContext struct {
 	DBType         string // PostgreSQL, MySQL, etc.
 	Database       string
 	Schemas        []SchemaInfo
+	UseMCP         bool   // If true, use MCP tools instead of injecting schema
 }
 
 // SchemaInfo holds information about a database schema

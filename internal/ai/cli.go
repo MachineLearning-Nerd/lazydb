@@ -105,8 +105,29 @@ func (c *ClaudeCLI) IsAvailable() bool {
 }
 
 func (c *ClaudeCLI) BuildCommand(ctx context.Context, schemaCtx *SchemaContext, query string, task string) (*exec.Cmd, error) {
-	// Build prompt with schema context
-	prompt := fmt.Sprintf(`Task: %s
+	var prompt string
+
+	// Check if MCP mode is enabled (schema context will be nil or explicitly disabled)
+	if schemaCtx == nil || schemaCtx.UseMCP {
+		// MCP Mode: Don't inject schema, let MCP tools handle it
+		prompt = fmt.Sprintf(`Task: %s
+
+Current SQL Query:
+%s
+
+Please use the available lazydb MCP tools to access the database schema and provide an improved version of the query or explanation as requested.
+
+Available MCP tools:
+- list_all_tables: Get all tables in the database
+- get_table_schema: Get detailed schema for a specific table
+- search_tables: Find tables by pattern
+- get_sample_data: Get sample rows from a table
+- get_table_count: Get row count for a table`,
+			task,
+			query)
+	} else {
+		// Legacy Mode: Inject schema context directly
+		prompt = fmt.Sprintf(`Task: %s
 
 Database Schema:
 %s
@@ -115,9 +136,16 @@ Current SQL Query:
 %s
 
 Please provide an improved version of the query or explanation as requested.`,
-		task,
-		schemaCtx.FormatAsMarkdown(),
-		query)
+			task,
+			schemaCtx.FormatAsMarkdown(),
+			query)
+	}
+
+	// Bypass permissions for MCP tools when in MCP mode
+	if schemaCtx != nil && schemaCtx.UseMCP {
+		cmd := exec.CommandContext(ctx, "claude", "--permission-mode", "bypassPermissions", "-p", prompt)
+		return cmd, nil
+	}
 
 	cmd := exec.CommandContext(ctx, "claude", "-p", prompt)
 	return cmd, nil
