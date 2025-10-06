@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -37,10 +39,26 @@ func (p *PostgresConnection) Connect(ctx context.Context) error {
 		p.config.SSLMode,
 	)
 
+	// Set connection timeout (default to 5 seconds if not specified)
+	timeout := time.Duration(p.config.ConnectionTimeout) * time.Second
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
+
+	// Create context with timeout
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	// Attempt connection
-	conn, err := pgx.Connect(ctx, connStr)
+	conn, err := pgx.Connect(ctxWithTimeout, connStr)
 	if err != nil {
 		p.status = StatusError
+
+		// Check if error is due to timeout
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("connection timeout after %v: could not connect to database at %s:%d", timeout, p.config.Host, p.config.Port)
+		}
+
 		return fmt.Errorf("failed to connect: %w", err)
 	}
 

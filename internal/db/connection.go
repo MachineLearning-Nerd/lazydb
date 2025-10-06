@@ -42,14 +42,15 @@ const (
 
 // ConnectionConfig holds database connection configuration
 type ConnectionConfig struct {
-	Name        string
-	Host        string
-	Port        int
-	Database    string
-	Username    string
-	Password    string
-	SSLMode     string
-	Environment Environment
+	Name             string
+	Host             string
+	Port             int
+	Database         string
+	Username         string
+	Password         string
+	SSLMode          string
+	Environment      Environment
+	ConnectionTimeout int // Connection timeout in seconds (default: 5)
 }
 
 // SchemaObject represents a database schema object
