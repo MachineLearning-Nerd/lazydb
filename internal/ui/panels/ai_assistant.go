@@ -26,7 +26,7 @@ type AIAssistantPanel struct {
 	error           string
 	copyStatus      string // Feedback for copy operation
 	provider        ai.CLIProvider
-	conn            db.Connection
+	connManager     *db.ConnectionManager
 	currentQuery    string
 	viewport        viewport.Model
 	width           int
@@ -37,7 +37,7 @@ type AIAssistantPanel struct {
 }
 
 // NewAIAssistantPanel creates a new AI assistant panel
-func NewAIAssistantPanel(provider ai.CLIProvider, conn db.Connection, useMCP bool) *AIAssistantPanel {
+func NewAIAssistantPanel(provider ai.CLIProvider, connMgr *db.ConnectionManager, useMCP bool) *AIAssistantPanel {
 	ti := textinput.New()
 	ti.Placeholder = "e.g., optimize this query for large datasets"
 	ti.CharLimit = 200
@@ -56,7 +56,7 @@ func NewAIAssistantPanel(provider ai.CLIProvider, conn db.Connection, useMCP boo
 		visible:         false,
 		input:           ti,
 		provider:        provider,
-		conn:            conn,
+		connManager:     connMgr,
 		viewport:        vp,
 		renderer:        renderer,
 		sections:        []ai.ResponseSection{},
@@ -112,11 +112,6 @@ func (p *AIAssistantPanel) SetSize(width, height int) {
 // SetProvider updates the AI provider
 func (p *AIAssistantPanel) SetProvider(provider ai.CLIProvider) {
 	p.provider = provider
-}
-
-// SetConnection updates the database connection
-func (p *AIAssistantPanel) SetConnection(conn db.Connection) {
-	p.conn = conn
 }
 
 // Update handles input events
@@ -250,8 +245,9 @@ func (p *AIAssistantPanel) invokeAI(task string) tea.Cmd {
 			}
 		}
 
-		// Check if connection is available
-		if p.conn == nil || p.conn.Status() != db.StatusConnected {
+		// Get fresh active connection (same pattern as query editor)
+		conn, err := p.connManager.GetActive()
+		if err != nil || conn.Status() != db.StatusConnected {
 			return AIResponseMsg{
 				Err: fmt.Errorf("no active database connection"),
 			}
@@ -267,9 +263,9 @@ func (p *AIAssistantPanel) invokeAI(task string) tea.Cmd {
 				UseMCP: true,
 			}
 		} else {
-			// Legacy Mode: Build full schema context
+			// Legacy Mode: Build full schema context from fresh connection
 			var err error
-			schemaCtx, err = ai.BuildSchemaContext(ctx, p.conn, 50, true)
+			schemaCtx, err = ai.BuildSchemaContext(ctx, conn, 50, true)
 			if err != nil {
 				return AIResponseMsg{
 					Err: fmt.Errorf("failed to build schema context: %w", err),
@@ -402,11 +398,22 @@ func (p *AIAssistantPanel) View() string {
 		providerName = p.provider.Name()
 	}
 
+	// Database info
+	dbName := "no connection"
+	if p.connManager != nil {
+		if conn, err := p.connManager.GetActive(); err == nil && conn != nil {
+			dbName = conn.Config().Database
+		}
+	}
+
 	// Build content
 	var content strings.Builder
 
 	content.WriteString(titleStyle.Render("🤖 AI Assistant"))
 	content.WriteString(labelStyle.Render(fmt.Sprintf(" (%s)", providerName)))
+	content.WriteString(" ")
+	dbStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
+	content.WriteString(dbStyle.Render(fmt.Sprintf("[%s]", dbName)))
 	content.WriteString("\n\n")
 
 	// Input field

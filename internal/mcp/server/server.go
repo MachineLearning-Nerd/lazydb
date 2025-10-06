@@ -19,18 +19,34 @@ type Config struct {
 	AIAPIKey      string
 }
 
+// ConnectionGetter is a function that returns the current database connection
+type ConnectionGetter func() (db.Connection, error)
+
 // MCPServer is the main MCP server
 type MCPServer struct {
-	conn         db.Connection
+	conn         db.Connection     // Deprecated: use connGetter instead
+	connGetter   ConnectionGetter  // Dynamic connection getter
 	toolRegistry *ToolRegistry
 	config       *Config
 	initialized  bool
 }
 
-// NewMCPServer creates a new MCP server instance
+// NewMCPServer creates a new MCP server instance (legacy, uses static connection)
 func NewMCPServer(conn db.Connection, config *Config) *MCPServer {
 	return &MCPServer{
 		conn:         conn,
+		connGetter:   nil,
+		toolRegistry: NewToolRegistry(),
+		config:       config,
+		initialized:  false,
+	}
+}
+
+// NewMCPServerWithGetter creates a new MCP server with dynamic connection getter
+func NewMCPServerWithGetter(connGetter ConnectionGetter, config *Config) *MCPServer {
+	return &MCPServer{
+		conn:         nil,
+		connGetter:   connGetter,
 		toolRegistry: NewToolRegistry(),
 		config:       config,
 		initialized:  false,
@@ -42,8 +58,17 @@ func (s *MCPServer) GetRegistry() *ToolRegistry {
 	return s.toolRegistry
 }
 
-// GetConnection returns the database connection
+// GetConnection returns the database connection (supports both static and dynamic)
 func (s *MCPServer) GetConnection() db.Connection {
+	// Use dynamic connection getter if available
+	if s.connGetter != nil {
+		conn, err := s.connGetter()
+		if err != nil {
+			return nil
+		}
+		return conn
+	}
+	// Fallback to static connection (legacy)
 	return s.conn
 }
 

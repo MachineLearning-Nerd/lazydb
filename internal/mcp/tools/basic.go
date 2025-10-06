@@ -6,18 +6,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 	"github.com/MachineLearning-Nerd/lazydb/internal/mcp/server"
 )
 
 // BasicTools provides fundamental database schema access tools
 type BasicTools struct {
-	conn db.Connection
+	connGetter server.ConnectionGetter
 }
 
 // NewBasicTools creates a new BasicTools instance
-func NewBasicTools(conn db.Connection) *BasicTools {
-	return &BasicTools{conn: conn}
+func NewBasicTools(connGetter server.ConnectionGetter) *BasicTools {
+	return &BasicTools{connGetter: connGetter}
 }
 
 // Register registers all basic tools with the tool registry
@@ -128,8 +127,14 @@ func (t *BasicTools) Register(registry *server.ToolRegistry) {
 
 // listAllTables returns all tables grouped by schema
 func (t *BasicTools) listAllTables(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	// Get all schemas
-	schemas, err := t.conn.ListSchemas(ctx)
+	schemas, err := conn.ListSchemas(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to list schemas: %w", err)
 	}
@@ -143,7 +148,7 @@ func (t *BasicTools) listAllTables(ctx context.Context, args map[string]interfac
 			continue
 		}
 
-		tables, err := t.conn.ListTables(ctx, schema)
+		tables, err := conn.ListTables(ctx, schema)
 		if err != nil {
 			continue
 		}
@@ -168,6 +173,12 @@ func (t *BasicTools) listAllTables(ctx context.Context, args map[string]interfac
 
 // getTableSchema returns detailed schema for a specific table
 func (t *BasicTools) getTableSchema(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -182,7 +193,7 @@ func (t *BasicTools) getTableSchema(ctx context.Context, args map[string]interfa
 	schema, table := parseTableName(tableName)
 
 	// Get columns
-	columns, err := t.conn.GetTableColumns(ctx, schema, table)
+	columns, err := conn.GetTableColumns(ctx, schema, table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get columns for %s.%s: %w", schema, table, err)
 	}
@@ -215,6 +226,12 @@ func (t *BasicTools) getTableSchema(ctx context.Context, args map[string]interfa
 
 // searchTables searches for tables matching a pattern
 func (t *BasicTools) searchTables(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	pattern, ok := args["pattern"].(string)
 	if !ok {
 		return "", fmt.Errorf("pattern parameter is required")
@@ -223,7 +240,7 @@ func (t *BasicTools) searchTables(ctx context.Context, args map[string]interface
 	filterSchema, _ := args["schema"].(string)
 
 	// Get all schemas
-	schemas, err := t.conn.ListSchemas(ctx)
+	schemas, err := conn.ListSchemas(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to list schemas: %w", err)
 	}
@@ -241,7 +258,7 @@ func (t *BasicTools) searchTables(ctx context.Context, args map[string]interface
 			continue
 		}
 
-		tables, err := t.conn.ListTables(ctx, schema)
+		tables, err := conn.ListTables(ctx, schema)
 		if err != nil {
 			continue
 		}
@@ -264,6 +281,12 @@ func (t *BasicTools) searchTables(ctx context.Context, args map[string]interface
 
 // getSampleData retrieves sample rows from a table
 func (t *BasicTools) getSampleData(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -285,7 +308,7 @@ func (t *BasicTools) getSampleData(ctx context.Context, args map[string]interfac
 	// Build and execute sample query
 	query := fmt.Sprintf("SELECT * FROM %s.%s LIMIT %d", schema, table, limit)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get sample data: %w", err)
 	}
@@ -312,6 +335,12 @@ func (t *BasicTools) getSampleData(ctx context.Context, args map[string]interfac
 
 // getTableCount returns the number of rows in a table
 func (t *BasicTools) getTableCount(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -322,7 +351,7 @@ func (t *BasicTools) getTableCount(ctx context.Context, args map[string]interfac
 	// Execute count query
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s.%s", schema, table)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get table count: %w", err)
 	}

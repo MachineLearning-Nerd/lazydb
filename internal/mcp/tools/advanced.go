@@ -6,18 +6,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 	"github.com/MachineLearning-Nerd/lazydb/internal/mcp/server"
 )
 
 // AdvancedTools provides advanced database inspection and analysis tools
 type AdvancedTools struct {
-	conn db.Connection
+	connGetter server.ConnectionGetter
 }
 
 // NewAdvancedTools creates a new AdvancedTools instance
-func NewAdvancedTools(conn db.Connection) *AdvancedTools {
-	return &AdvancedTools{conn: conn}
+func NewAdvancedTools(connGetter server.ConnectionGetter) *AdvancedTools {
+	return &AdvancedTools{connGetter: connGetter}
 }
 
 // Register registers all advanced tools with the tool registry
@@ -432,6 +431,12 @@ func (t *AdvancedTools) registerDiscoveryTools(registry *server.ToolRegistry) {
 // ============================================================================
 
 func (t *AdvancedTools) getTableDDL(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -445,7 +450,7 @@ func (t *AdvancedTools) getTableDDL(ctx context.Context, args map[string]interfa
 	schema, table := parseTableName(tableName)
 
 	// Get columns
-	columns, err := t.conn.GetTableColumns(ctx, schema, table)
+	columns, err := conn.GetTableColumns(ctx, schema, table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get columns: %w", err)
 	}
@@ -461,7 +466,7 @@ func (t *AdvancedTools) getTableDDL(ctx context.Context, args map[string]interfa
 		ORDER BY contype, conname
 	`
 
-	constraintsResult, err := t.conn.ExecuteQuery(ctx,
+	constraintsResult, err := conn.ExecuteQuery(ctx,
 		strings.ReplaceAll(constraintsQuery, "$1", fmt.Sprintf("'%s.%s'", schema, table)))
 	if err != nil {
 		return "", fmt.Errorf("failed to get constraints: %w", err)
@@ -519,7 +524,7 @@ func (t *AdvancedTools) getTableDDL(ctx context.Context, args map[string]interfa
 		indexesQuery = strings.ReplaceAll(indexesQuery, "$2", fmt.Sprintf("'%s'", table))
 		indexesQuery = strings.ReplaceAll(indexesQuery, "$3", fmt.Sprintf("'%s.%s'", schema, table))
 
-		indexesResult, err := t.conn.ExecuteQuery(ctx, indexesQuery)
+		indexesResult, err := conn.ExecuteQuery(ctx, indexesQuery)
 		if err == nil && len(indexesResult.Rows) > 0 {
 			ddl.WriteString("\n-- Indexes\n")
 			for _, row := range indexesResult.Rows {
@@ -535,6 +540,12 @@ func (t *AdvancedTools) getTableDDL(ctx context.Context, args map[string]interfa
 }
 
 func (t *AdvancedTools) getViewDefinition(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	viewName, ok := args["view_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("view_name parameter is required")
@@ -546,7 +557,7 @@ func (t *AdvancedTools) getViewDefinition(ctx context.Context, args map[string]i
 		SELECT pg_catalog.pg_get_viewdef('%s.%s'::regclass, true) as definition
 	`, schema, view)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get view definition: %w", err)
 	}
@@ -565,6 +576,12 @@ func (t *AdvancedTools) getViewDefinition(ctx context.Context, args map[string]i
 }
 
 func (t *AdvancedTools) getFunctionDefinition(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	functionName, ok := args["function_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("function_name parameter is required")
@@ -587,7 +604,7 @@ func (t *AdvancedTools) getFunctionDefinition(ctx context.Context, args map[stri
 		WHERE n.nspname = '%s' AND p.proname = '%s'
 	`, schema, functionName)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get function definition: %w", err)
 	}
@@ -613,6 +630,12 @@ func (t *AdvancedTools) getFunctionDefinition(ctx context.Context, args map[stri
 // ============================================================================
 
 func (t *AdvancedTools) getTableIndexes(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -641,7 +664,7 @@ func (t *AdvancedTools) getTableIndexes(ctx context.Context, args map[string]int
 		ORDER BY i.indexname
 	`, schema, table)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get indexes: %w", err)
 	}
@@ -671,6 +694,12 @@ func (t *AdvancedTools) getTableIndexes(ctx context.Context, args map[string]int
 }
 
 func (t *AdvancedTools) getTableSize(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -692,7 +721,7 @@ func (t *AdvancedTools) getTableSize(ctx context.Context, args map[string]interf
 			(SELECT COUNT(*) FROM %s) as row_count
 	`, fullTableName, fullTableName, fullTableName, fullTableName, fullTableName)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get table size: %w", err)
 	}
@@ -720,7 +749,7 @@ func (t *AdvancedTools) getTableSize(ctx context.Context, args map[string]interf
 			WHERE schemaname = '%s' AND tablename = '%s'
 		`, schema, table)
 
-		indexResult, err := t.conn.ExecuteQuery(ctx, indexSizeQuery)
+		indexResult, err := conn.ExecuteQuery(ctx, indexSizeQuery)
 		if err == nil && len(indexResult.Rows) > 0 {
 			indexSizes := make([]map[string]string, len(indexResult.Rows))
 			for i, indexRow := range indexResult.Rows {
@@ -738,6 +767,12 @@ func (t *AdvancedTools) getTableSize(ctx context.Context, args map[string]interf
 }
 
 func (t *AdvancedTools) explainQuery(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	query, ok := args["query"].(string)
 	if !ok {
 		return "", fmt.Errorf("query parameter is required")
@@ -770,7 +805,7 @@ func (t *AdvancedTools) explainQuery(ctx context.Context, args map[string]interf
 
 	fullQuery := fmt.Sprintf("%s %s", explainCmd, query)
 
-	result, err := t.conn.ExecuteQuery(ctx, fullQuery)
+	result, err := conn.ExecuteQuery(ctx, fullQuery)
 	if err != nil {
 		return "", fmt.Errorf("failed to explain query: %w", err)
 	}
@@ -799,6 +834,12 @@ func (t *AdvancedTools) explainQuery(ctx context.Context, args map[string]interf
 // ============================================================================
 
 func (t *AdvancedTools) getForeignKeys(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -834,7 +875,7 @@ func (t *AdvancedTools) getForeignKeys(ctx context.Context, args map[string]inte
 				AND tc.table_name = '%s'
 		`, schema, table)
 
-		result, err := t.conn.ExecuteQuery(ctx, outgoingQuery)
+		result, err := conn.ExecuteQuery(ctx, outgoingQuery)
 		if err == nil {
 			for _, row := range result.Rows {
 				foreignKeys = append(foreignKeys, map[string]interface{}{
@@ -868,7 +909,7 @@ func (t *AdvancedTools) getForeignKeys(ctx context.Context, args map[string]inte
 				AND ccu.table_name = '%s'
 		`, schema, table)
 
-		result, err := t.conn.ExecuteQuery(ctx, incomingQuery)
+		result, err := conn.ExecuteQuery(ctx, incomingQuery)
 		if err == nil {
 			for _, row := range result.Rows {
 				foreignKeys = append(foreignKeys, map[string]interface{}{
@@ -892,6 +933,12 @@ func (t *AdvancedTools) getForeignKeys(ctx context.Context, args map[string]inte
 }
 
 func (t *AdvancedTools) getTableConstraints(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -921,7 +968,7 @@ func (t *AdvancedTools) getTableConstraints(ctx context.Context, args map[string
 		ORDER BY contype, conname
 	`, fullTableName)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get constraints: %w", err)
 	}
@@ -948,6 +995,12 @@ func (t *AdvancedTools) getTableConstraints(ctx context.Context, args map[string
 }
 
 func (t *AdvancedTools) getTableDependencies(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -974,7 +1027,7 @@ func (t *AdvancedTools) getTableDependencies(ctx context.Context, args map[strin
 		ORDER BY dependent_schema, dependent_view
 	`, schema, table, table)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get dependencies: %w", err)
 	}
@@ -1012,6 +1065,12 @@ func (t *AdvancedTools) getTableDependencies(ctx context.Context, args map[strin
 // ============================================================================
 
 func (t *AdvancedTools) getTableTriggers(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -1032,7 +1091,7 @@ func (t *AdvancedTools) getTableTriggers(ctx context.Context, args map[string]in
 		ORDER BY trigger_name
 	`, schema, table)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get triggers: %w", err)
 	}
@@ -1058,6 +1117,12 @@ func (t *AdvancedTools) getTableTriggers(ctx context.Context, args map[string]in
 }
 
 func (t *AdvancedTools) getTriggerDefinition(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	triggerName, ok := args["trigger_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("trigger_name parameter is required")
@@ -1084,7 +1149,7 @@ func (t *AdvancedTools) getTriggerDefinition(ctx context.Context, args map[strin
 			AND NOT t.tgisinternal
 	`, schema, table, triggerName)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get trigger definition: %w", err)
 	}
@@ -1110,6 +1175,12 @@ func (t *AdvancedTools) getTriggerDefinition(ctx context.Context, args map[strin
 // ============================================================================
 
 func (t *AdvancedTools) getColumnStats(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -1136,7 +1207,7 @@ func (t *AdvancedTools) getColumnStats(ctx context.Context, args map[string]inte
 		ORDER BY attname
 	`, whereClause)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get column stats: %w", err)
 	}
@@ -1163,6 +1234,12 @@ func (t *AdvancedTools) getColumnStats(ctx context.Context, args map[string]inte
 }
 
 func (t *AdvancedTools) getTableStats(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -1189,7 +1266,7 @@ func (t *AdvancedTools) getTableStats(ctx context.Context, args map[string]inter
 		WHERE schemaname = '%s' AND relname = '%s'
 	`, schema, table)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get table stats: %w", err)
 	}
@@ -1225,6 +1302,12 @@ func (t *AdvancedTools) getTableStats(ctx context.Context, args map[string]inter
 // ============================================================================
 
 func (t *AdvancedTools) listSequences(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	schemaFilter, _ := args["schema"].(string)
 
 	whereClause := ""
@@ -1247,7 +1330,7 @@ func (t *AdvancedTools) listSequences(ctx context.Context, args map[string]inter
 		ORDER BY sequence_schema, sequence_name
 	`, whereClause)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to list sequences: %w", err)
 	}
@@ -1274,6 +1357,12 @@ func (t *AdvancedTools) listSequences(ctx context.Context, args map[string]inter
 }
 
 func (t *AdvancedTools) listMaterializedViews(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	schemaFilter, _ := args["schema"].(string)
 
 	whereClause := "WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema'"
@@ -1292,7 +1381,7 @@ func (t *AdvancedTools) listMaterializedViews(ctx context.Context, args map[stri
 		ORDER BY schemaname, matviewname
 	`, whereClause)
 
-	result, err := t.conn.ExecuteQuery(ctx, query)
+	result, err := conn.ExecuteQuery(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to list materialized views: %w", err)
 	}
@@ -1315,6 +1404,12 @@ func (t *AdvancedTools) listMaterializedViews(ctx context.Context, args map[stri
 }
 
 func (t *AdvancedTools) getTableReferences(ctx context.Context, args map[string]interface{}) (string, error) {
+	// Get current connection
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
 	tableName, ok := args["table_name"].(string)
 	if !ok {
 		return "", fmt.Errorf("table_name parameter is required")
@@ -1337,7 +1432,7 @@ func (t *AdvancedTools) getTableReferences(ctx context.Context, args map[string]
 		ORDER BY ccu.table_schema, ccu.table_name
 	`, schema, table)
 
-	outgoingResult, _ := t.conn.ExecuteQuery(ctx, outgoingQuery)
+	outgoingResult, _ := conn.ExecuteQuery(ctx, outgoingQuery)
 
 	outgoing := make([]string, len(outgoingResult.Rows))
 	for i, row := range outgoingResult.Rows {
@@ -1359,7 +1454,7 @@ func (t *AdvancedTools) getTableReferences(ctx context.Context, args map[string]
 		ORDER BY tc.table_schema, tc.table_name
 	`, schema, table)
 
-	incomingResult, _ := t.conn.ExecuteQuery(ctx, incomingQuery)
+	incomingResult, _ := conn.ExecuteQuery(ctx, incomingQuery)
 
 	incoming := make([]string, len(incomingResult.Rows))
 	for i, row := range incomingResult.Rows {

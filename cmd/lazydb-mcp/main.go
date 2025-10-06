@@ -64,34 +64,52 @@ func main() {
 		}
 	}
 
-	// Get database connection
-	var conn db.Connection
-	if *connectionName != "" {
-		conn, err = connMgr.GetConnection(*connectionName)
+	// Create connection getter that reads active connection from file on every call
+	// This ensures MCP tools always use the current active connection
+	getActiveConnection := func() (db.Connection, error) {
+		// Load current connections from file
+		currentConfig, err := storage.LoadConnections()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Connection '%s' not found\n", *connectionName)
-			os.Exit(1)
+			return nil, fmt.Errorf("failed to load connections: %w", err)
 		}
-	} else {
-		conn, err = connMgr.GetActive()
+
+		// Determine which connection to use
+		targetConnName := *connectionName
+		if targetConnName == "" {
+			targetConnName = currentConfig.ActiveConnection
+		}
+
+		if targetConnName == "" {
+			return nil, fmt.Errorf("no active connection specified")
+		}
+
+		// Get connection from manager
+		conn, err := connMgr.GetConnection(targetConnName)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "No active connection found. Please specify --connection or set an active connection in LazyDB\n")
-			os.Exit(1)
+			return nil, fmt.Errorf("connection '%s' not found: %w", targetConnName, err)
 		}
+
+		// Connect if not already connected
+		if conn.Status() != db.StatusConnected {
+			ctx := context.Background()
+			if err := conn.Connect(ctx); err != nil {
+				return nil, fmt.Errorf("failed to connect to '%s': %w", targetConnName, err)
+			}
+		}
+
+		return conn, nil
 	}
 
-	// Connect to database if not already connected
-	if conn.Status() != db.StatusConnected {
-		ctx := context.Background()
-		if err := conn.Connect(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to connect to database: %v\n", err)
-			os.Exit(1)
-		}
+	// Verify initial connection
+	conn, err := getActiveConnection()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get initial connection: %v\n", err)
+		os.Exit(1)
 	}
 
 	if *verbose {
 		connCfg := conn.Config()
-		fmt.Fprintf(os.Stderr, "Connected to: %s (%s)\n", connCfg.Name, connCfg.Database)
+		fmt.Fprintf(os.Stderr, "Initial connection: %s (%s)\n", connCfg.Name, connCfg.Database)
 	}
 
 	// Create MCP server configuration
@@ -104,15 +122,15 @@ func main() {
 		AIAPIKey:      getAIAPIKey(),
 	}
 
-	// Create MCP server
-	mcpServer := server.NewMCPServer(conn, mcpConfig)
+	// Create MCP server with dynamic connection getter
+	mcpServer := server.NewMCPServerWithGetter(getActiveConnection, mcpConfig)
 
-	// Register basic tools
-	basicTools := tools.NewBasicTools(conn)
+	// Register tools with dynamic connection getter
+	// Tools will fetch fresh connection from file on every execution
+	basicTools := tools.NewBasicTools(getActiveConnection)
 	basicTools.Register(mcpServer.GetRegistry())
 
-	// Register advanced tools
-	advancedTools := tools.NewAdvancedTools(conn)
+	advancedTools := tools.NewAdvancedTools(getActiveConnection)
 	advancedTools.Register(mcpServer.GetRegistry())
 
 	if *verbose {
