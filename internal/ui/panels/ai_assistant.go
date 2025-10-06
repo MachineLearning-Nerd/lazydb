@@ -3,6 +3,7 @@ package panels
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/atotto/clipboard"
@@ -288,6 +289,22 @@ func (p *AIAssistantPanel) invokeAI(task string) tea.Cmd {
 	}
 }
 
+// processMarkdown pre-processes markdown to handle bold, italic, and formatting issues
+func processMarkdown(content string) string {
+	// Define styles for formatted text
+	boldStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("252"))
+
+	// Replace **text** with styled bold (handles **, ***, ****, etc.)
+	// This fixes the issue where **stat_****tests** shows as literal **
+	content = regexp.MustCompile(`\*\*+([^*]+)\*\*+`).ReplaceAllStringFunc(content, func(match string) string {
+		// Extract text between asterisks
+		text := regexp.MustCompile(`\*+`).ReplaceAllString(match, "")
+		return boldStyle.Render(text)
+	})
+
+	return content
+}
+
 // updateViewport updates the viewport content with formatted sections
 func (p *AIAssistantPanel) updateViewport() {
 	// Recreate renderer with current viewport width for proper wrapping
@@ -316,14 +333,20 @@ func (p *AIAssistantPanel) updateViewport() {
 			indicator = "▶"
 		}
 
-		headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
+		headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("51")) // Bright cyan
 		if isSelected {
-			headerStyle = headerStyle.Foreground(lipgloss.Color("46")) // Green for selected
+			headerStyle = headerStyle.Foreground(lipgloss.Color("46")) // Bright green for selected
 		}
 
 		header := fmt.Sprintf("%s Section %d: %s", indicator, section.Number, sectionTitle)
 		content.WriteString(headerStyle.Render(header))
 		content.WriteString("\n")
+
+		// Add separator line under header for visual clarity
+		separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+		separator := strings.Repeat("─", 60)
+		content.WriteString(separatorStyle.Render(separator))
+		content.WriteString("\n\n") // Extra spacing after separator
 
 		// Render section content with glamour for code/markdown
 		var sectionContent string
@@ -341,25 +364,30 @@ func (p *AIAssistantPanel) updateViewport() {
 				sectionContent = section.Content
 			}
 		} else {
+			// Pre-process markdown to fix bold formatting (** → styled text)
+			processedContent := processMarkdown(section.Content)
+
 			// Render as markdown
 			if p.renderer != nil {
-				rendered, err := p.renderer.Render(section.Content)
+				rendered, err := p.renderer.Render(processedContent)
 				if err == nil {
 					sectionContent = rendered
 				} else {
-					sectionContent = section.Content
+					sectionContent = processedContent
 				}
 			} else {
-				sectionContent = section.Content
+				sectionContent = processedContent
 			}
 		}
 
-		content.WriteString(sectionContent)
+		// Indent section content slightly for visual hierarchy
+		indentedContent := "  " + strings.ReplaceAll(sectionContent, "\n", "\n  ")
+		content.WriteString(indentedContent)
 		content.WriteString("\n")
 
-		// Add spacing between sections
+		// Add more spacing between sections
 		if i < len(p.sections)-1 {
-			content.WriteString("\n")
+			content.WriteString("\n\n") // Double spacing between sections
 		}
 	}
 
@@ -383,7 +411,7 @@ func (p *AIAssistantPanel) View() string {
 		Foreground(lipgloss.Color("212"))
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
+		Foreground(lipgloss.Color("252")) // Bright white for better contrast
 
 	errorStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("196")).
