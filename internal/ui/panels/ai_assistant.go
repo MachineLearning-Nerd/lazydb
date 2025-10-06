@@ -45,8 +45,9 @@ func NewAIAssistantPanel(provider ai.CLIProvider, conn db.Connection, useMCP boo
 	vp := viewport.New(60, 10)
 
 	// Initialize glamour renderer for markdown
+	// Use notty style to avoid ANSI escape codes in Bubble Tea TUI
 	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStandardStyle("notty"),
 		glamour.WithWordWrap(60),
 	)
 
@@ -274,9 +275,10 @@ func (p *AIAssistantPanel) invokeAI(task string) tea.Cmd {
 // updateViewport updates the viewport content with formatted sections
 func (p *AIAssistantPanel) updateViewport() {
 	// Recreate renderer with current viewport width for proper wrapping
+	// Use notty style to avoid ANSI escape codes in Bubble Tea TUI
 	if p.viewport.Width > 0 {
 		p.renderer, _ = glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStandardStyle("notty"),
 			glamour.WithWordWrap(p.viewport.Width),
 		)
 	}

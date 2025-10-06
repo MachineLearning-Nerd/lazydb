@@ -115,14 +115,18 @@ func (c *ClaudeCLI) BuildCommand(ctx context.Context, schemaCtx *SchemaContext, 
 Current SQL Query:
 %s
 
-Please use the available lazydb MCP tools to access the database schema and provide an improved version of the query or explanation as requested.
+Please use the available lazydb MCP tools to access the database schema, inspect database objects, analyze queries, and provide an improved version of the query or explanation as requested.
 
-Available MCP tools:
-- list_all_tables: Get all tables in the database
-- get_table_schema: Get detailed schema for a specific table
-- search_tables: Find tables by pattern
-- get_sample_data: Get sample rows from a table
-- get_table_count: Get row count for a table`,
+The lazydb MCP server provides comprehensive database inspection tools including:
+- Schema exploration (tables, views, functions, sequences)
+- DDL generation and object definitions
+- Index and constraint analysis
+- Query performance analysis (EXPLAIN)
+- Table statistics and storage metrics
+- Foreign key relationships and dependencies
+- Trigger inspection
+
+Use these tools as needed to understand the database structure and provide the best solution.`,
 			task,
 			query)
 	} else {
