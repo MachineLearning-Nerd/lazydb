@@ -273,6 +273,14 @@ func (p *AIAssistantPanel) invokeAI(task string) tea.Cmd {
 
 // updateViewport updates the viewport content with formatted sections
 func (p *AIAssistantPanel) updateViewport() {
+	// Recreate renderer with current viewport width for proper wrapping
+	if p.viewport.Width > 0 {
+		p.renderer, _ = glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(p.viewport.Width),
+		)
+	}
+
 	if len(p.sections) == 0 {
 		p.viewport.SetContent(p.response)
 		return
