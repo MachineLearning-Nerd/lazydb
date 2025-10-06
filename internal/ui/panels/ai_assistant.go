@@ -32,7 +32,8 @@ type AIAssistantPanel struct {
 	width           int
 	height          int
 	renderer        *glamour.TermRenderer
-	useMCP          bool // If true, use MCP tools instead of injecting schema
+	useMCP          bool   // If true, use MCP tools instead of injecting schema
+	mode            string // "input" or "response" - vim-like modal system
 }
 
 // NewAIAssistantPanel creates a new AI assistant panel
@@ -74,6 +75,7 @@ func (p *AIAssistantPanel) Show(query string) {
 	p.error = ""
 	p.copyStatus = ""
 	p.loading = false
+	p.mode = "input" // Start in input mode for typing question
 	p.input.SetValue("")
 	p.input.Focus()
 }
@@ -130,8 +132,18 @@ func (p *AIAssistantPanel) Update(msg tea.Msg) tea.Cmd {
 
 		switch msg.String() {
 		case "esc":
-			p.Hide()
-			return nil
+			// Hierarchical ESC: Response Mode → Input Mode → Close Dialog
+			if p.mode == "response" {
+				// Response mode: ESC goes back to input mode for follow-up questions
+				p.mode = "input"
+				p.input.Focus()
+				p.copyStatus = ""
+				return nil
+			} else {
+				// Input mode: ESC closes dialog completely
+				p.Hide()
+				return nil
+			}
 		case "enter":
 			// Submit the request
 			if !p.loading && p.input.Value() != "" {
@@ -154,10 +166,18 @@ func (p *AIAssistantPanel) Update(msg tea.Msg) tea.Cmd {
 			}
 			p.copyStatus += " "
 			return nil
+		case "i":
+			// Vim-like 'i' key: switch to input mode for follow-up questions
+			if p.mode == "response" {
+				p.mode = "input"
+				p.input.Focus()
+				p.copyStatus = ""
+				return nil
+			}
 		case "c", "n", "p":
-			// Handle section navigation only when viewing response
-			// Otherwise, pass to input so user can type these letters
-			if p.response != "" && len(p.sections) > 0 {
+			// Modal key handling: behavior depends on mode
+			if p.mode == "response" && len(p.sections) > 0 {
+				// Response mode: n/p/c work for navigation and copying
 				switch msg.String() {
 				case "c":
 					// Copy current section only
@@ -184,11 +204,9 @@ func (p *AIAssistantPanel) Update(msg tea.Msg) tea.Cmd {
 					}
 				}
 				return nil
-			} else {
-				// No response yet - pass to input so user can type
-				if !p.loading {
-					p.input, cmd = p.input.Update(msg)
-				}
+			} else if p.mode == "input" && !p.loading {
+				// Input mode: pass keys to textinput for typing
+				p.input, cmd = p.input.Update(msg)
 				return cmd
 			}
 		case "up", "down", "pgup", "pgdown":
@@ -211,6 +229,8 @@ func (p *AIAssistantPanel) Update(msg tea.Msg) tea.Cmd {
 			// Parse response into sections
 			p.sections = ai.ParseResponse(msg.Response)
 			p.selectedSection = 0
+			// Switch to response mode - now n/p/c work for navigation
+			p.mode = "response"
 			// Update viewport with formatted response
 			p.updateViewport()
 		}
@@ -425,17 +445,18 @@ func (p *AIAssistantPanel) View() string {
 		content.WriteString("\n")
 	}
 
-	// Help text
+	// Help text - show mode-specific commands
 	if p.loading {
 		content.WriteString(labelStyle.Render("[Esc] Cancel"))
-	} else if p.response != "" && len(p.sections) > 0 {
-		// Show section navigation help
-		content.WriteString(labelStyle.Render("[n/p] Sections  [c] Copy §  [Ctrl+C] Copy All  [↑/↓] Scroll  [Esc] Close"))
-	} else if p.response != "" {
-		// No sections, show basic help
-		content.WriteString(labelStyle.Render("[↑/↓] Scroll  [Ctrl+C] Copy  [Esc] Close"))
+	} else if p.mode == "response" && len(p.sections) > 0 {
+		// Response mode with sections: show navigation and mode switching help
+		content.WriteString(labelStyle.Render("RESPONSE MODE  [n/p] Sections  [c] Copy §  [Ctrl+C] Copy All  [i/Esc] New Question"))
+	} else if p.mode == "response" {
+		// Response mode without sections: show basic help and mode switching
+		content.WriteString(labelStyle.Render("RESPONSE MODE  [↑/↓] Scroll  [Ctrl+C] Copy  [i/Esc] New Question"))
 	} else {
-		content.WriteString(labelStyle.Render("[Enter] Submit  [Esc] Close"))
+		// Input mode: show typing help
+		content.WriteString(labelStyle.Render("INPUT MODE  [Enter] Submit  [Esc] Close"))
 	}
 
 	return borderStyle.Render(content.String())
