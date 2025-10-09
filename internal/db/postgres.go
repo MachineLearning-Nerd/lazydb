@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PostgresConnection represents a PostgreSQL database connection
+// PostgresConnection represents a PostgreSQL database connection pool
 type PostgresConnection struct {
 	config ConnectionConfig
-	conn   *pgx.Conn
+	pool   *pgxpool.Pool
 	status ConnectionStatus
 }
 
@@ -24,7 +24,7 @@ func NewPostgresConnection(config ConnectionConfig) *PostgresConnection {
 	}
 }
 
-// Connect establishes a connection to the PostgreSQL database
+// Connect establishes a connection pool to the PostgreSQL database
 func (p *PostgresConnection) Connect(ctx context.Context) error {
 	p.status = StatusConnecting
 
@@ -39,18 +39,33 @@ func (p *PostgresConnection) Connect(ctx context.Context) error {
 		p.config.SSLMode,
 	)
 
-	// Set connection timeout (default to 5 seconds if not specified)
+	// Create pool configuration
+	poolConfig, err := pgxpool.ParseConfig(connStr)
+	if err != nil {
+		p.status = StatusError
+		return fmt.Errorf("failed to parse connection config: %w", err)
+	}
+
+	// Configure pool settings for optimal performance
+	poolConfig.MaxConns = 10                    // Maximum connections in pool
+	poolConfig.MinConns = 2                     // Minimum connections to maintain
+	poolConfig.HealthCheckPeriod = 30 * time.Second
+	poolConfig.MaxConnLifetime = 1 * time.Hour
+	poolConfig.MaxConnIdleTime = 30 * time.Minute
+
+	// Set connection timeout
 	timeout := time.Duration(p.config.ConnectionTimeout) * time.Second
 	if timeout == 0 {
 		timeout = 5 * time.Second
 	}
+	poolConfig.ConnConfig.ConnectTimeout = timeout
 
-	// Create context with timeout
+	// Create context with timeout for initial connection
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Attempt connection
-	conn, err := pgx.Connect(ctxWithTimeout, connStr)
+	// Attempt to create connection pool
+	pool, err := pgxpool.NewWithConfig(ctxWithTimeout, poolConfig)
 	if err != nil {
 		p.status = StatusError
 
@@ -59,32 +74,40 @@ func (p *PostgresConnection) Connect(ctx context.Context) error {
 			return fmt.Errorf("connection timeout after %v: could not connect to database at %s:%d", timeout, p.config.Host, p.config.Port)
 		}
 
-		return fmt.Errorf("failed to connect: %w", err)
+		return fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	p.conn = conn
+	// Test the connection with a ping
+	err = pool.Ping(ctxWithTimeout)
+	if err != nil {
+		pool.Close()
+		p.status = StatusError
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	p.pool = pool
 	p.status = StatusConnected
 	return nil
 }
 
-// Disconnect closes the database connection
+// Disconnect closes the database connection pool
 func (p *PostgresConnection) Disconnect(ctx context.Context) error {
-	if p.conn == nil {
+	if p.pool == nil {
 		return nil
 	}
 
-	err := p.conn.Close(ctx)
-	p.conn = nil
+	p.pool.Close()
+	p.pool = nil
 	p.status = StatusDisconnected
-	return err
+	return nil
 }
 
 // Ping checks if the connection is alive
 func (p *PostgresConnection) Ping(ctx context.Context) error {
-	if p.conn == nil {
+	if p.pool == nil {
 		return fmt.Errorf("not connected")
 	}
-	return p.conn.Ping(ctx)
+	return p.pool.Ping(ctx)
 }
 
 // Status returns the current connection status
@@ -97,14 +120,22 @@ func (p *PostgresConnection) Config() ConnectionConfig {
 	return p.config
 }
 
-// Conn returns the underlying pgx connection
-func (p *PostgresConnection) Conn() *pgx.Conn {
-	return p.conn
+// Pool returns the underlying connection pool
+func (p *PostgresConnection) Pool() *pgxpool.Pool {
+	return p.pool
+}
+
+// Conn returns the underlying pgx connection for backward compatibility
+// Note: This method is deprecated, use Pool() instead
+func (p *PostgresConnection) Conn() interface{} {
+	// For backward compatibility, return the pool
+	// This method should not be used with connection pools
+	return p.pool
 }
 
 // ListSchemas returns all schemas in the database
 func (p *PostgresConnection) ListSchemas(ctx context.Context) ([]string, error) {
-	if p.conn == nil {
+	if p.pool == nil {
 		return nil, fmt.Errorf("not connected")
 	}
 
@@ -116,7 +147,7 @@ func (p *PostgresConnection) ListSchemas(ctx context.Context) ([]string, error) 
 		ORDER BY schema_name
 	`
 
-	rows, err := p.conn.Query(ctx, query)
+	rows, err := p.pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list schemas: %w", err)
 	}
@@ -136,7 +167,7 @@ func (p *PostgresConnection) ListSchemas(ctx context.Context) ([]string, error) 
 
 // ListTables returns all tables in a schema
 func (p *PostgresConnection) ListTables(ctx context.Context, schema string) ([]SchemaObject, error) {
-	if p.conn == nil {
+	if p.pool == nil {
 		return nil, fmt.Errorf("not connected")
 	}
 
@@ -149,7 +180,7 @@ func (p *PostgresConnection) ListTables(ctx context.Context, schema string) ([]S
 		ORDER BY table_name
 	`
 
-	rows, err := p.conn.Query(ctx, query, schema)
+	rows, err := p.pool.Query(ctx, query, schema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tables: %w", err)
 	}
@@ -173,7 +204,7 @@ func (p *PostgresConnection) ListTables(ctx context.Context, schema string) ([]S
 
 // ListViews returns all views in a schema
 func (p *PostgresConnection) ListViews(ctx context.Context, schema string) ([]SchemaObject, error) {
-	if p.conn == nil {
+	if p.pool == nil {
 		return nil, fmt.Errorf("not connected")
 	}
 
@@ -184,7 +215,7 @@ func (p *PostgresConnection) ListViews(ctx context.Context, schema string) ([]Sc
 		ORDER BY table_name
 	`
 
-	rows, err := p.conn.Query(ctx, query, schema)
+	rows, err := p.pool.Query(ctx, query, schema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list views: %w", err)
 	}
@@ -208,7 +239,7 @@ func (p *PostgresConnection) ListViews(ctx context.Context, schema string) ([]Sc
 
 // ListFunctions returns all functions in a schema
 func (p *PostgresConnection) ListFunctions(ctx context.Context, schema string) ([]SchemaObject, error) {
-	if p.conn == nil {
+	if p.pool == nil {
 		return nil, fmt.Errorf("not connected")
 	}
 
@@ -219,7 +250,7 @@ func (p *PostgresConnection) ListFunctions(ctx context.Context, schema string) (
 		ORDER BY routine_name
 	`
 
-	rows, err := p.conn.Query(ctx, query, schema)
+	rows, err := p.pool.Query(ctx, query, schema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list functions: %w", err)
 	}
@@ -243,7 +274,7 @@ func (p *PostgresConnection) ListFunctions(ctx context.Context, schema string) (
 
 // GetTableColumns returns column information for a table
 func (p *PostgresConnection) GetTableColumns(ctx context.Context, schema, table string) ([]TableColumn, error) {
-	if p.conn == nil {
+	if p.pool == nil {
 		return nil, fmt.Errorf("not connected")
 	}
 
@@ -258,7 +289,7 @@ func (p *PostgresConnection) GetTableColumns(ctx context.Context, schema, table 
 		ORDER BY ordinal_position
 	`
 
-	rows, err := p.conn.Query(ctx, query, schema, table)
+	rows, err := p.pool.Query(ctx, query, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get table columns: %w", err)
 	}
@@ -278,13 +309,13 @@ func (p *PostgresConnection) GetTableColumns(ctx context.Context, schema, table 
 	return columns, rows.Err()
 }
 
-// ExecuteQuery executes a SQL query and returns the results
+// ExecuteQuery executes a SQL query using the connection pool
 func (p *PostgresConnection) ExecuteQuery(ctx context.Context, query string) (QueryResult, error) {
-	if p.conn == nil {
+	if p.pool == nil {
 		return QueryResult{}, fmt.Errorf("not connected to database")
 	}
 
-	result := ExecuteQuery(ctx, p.conn, query)
+	result := ExecuteQuery(ctx, p.pool, query)
 	if result.Error != nil {
 		return result, result.Error
 	}

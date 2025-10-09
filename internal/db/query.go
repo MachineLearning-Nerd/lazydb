@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // QueryResult represents the result of a database query
@@ -18,8 +19,15 @@ type QueryResult struct {
 	Error        error
 }
 
+// QueryExecutor is an interface for types that can execute SQL queries
+// Both pgx.Conn and pgxpool.Pool implement this interface
+type QueryExecutor interface {
+	Query(ctx context.Context, query string, args ...interface{}) (pgx.Rows, error)
+	Exec(ctx context.Context, query string, args ...interface{}) (pgconn.CommandTag, error)
+}
+
 // ExecuteQuery executes a SQL query and returns the results
-func ExecuteQuery(ctx context.Context, conn *pgx.Conn, query string) QueryResult {
+func ExecuteQuery(ctx context.Context, executor QueryExecutor, query string) QueryResult {
 	startTime := time.Now()
 
 	result := QueryResult{
@@ -44,7 +52,7 @@ func ExecuteQuery(ctx context.Context, conn *pgx.Conn, query string) QueryResult
 	// Use Exec for multiple statements or non-SELECT queries
 	if isMultiStatement || !isSelectQuery {
 		// Use Exec() which supports multiple statements via simple protocol
-		commandTag, err := conn.Exec(ctx, query)
+		commandTag, err := executor.Exec(ctx, query)
 		if err != nil {
 			result.Error = err
 			result.ExecutionMs = time.Since(startTime).Milliseconds()
@@ -60,7 +68,7 @@ func ExecuteQuery(ctx context.Context, conn *pgx.Conn, query string) QueryResult
 	}
 
 	// Use Query() for single SELECT statements
-	rows, err := conn.Query(ctx, query)
+	rows, err := executor.Query(ctx, query)
 	if err != nil {
 		result.Error = err
 		result.ExecutionMs = time.Since(startTime).Milliseconds()

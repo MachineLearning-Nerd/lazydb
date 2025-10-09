@@ -79,7 +79,10 @@ func TestQueryExecution(t *testing.T) {
 	defer conn.Disconnect(ctx)
 
 	// Test simple query
-	result := db.ExecuteQuery(ctx, conn.Conn(), "SELECT 1 as num, 'test' as text")
+	result, err := conn.ExecuteQuery(ctx, "SELECT 1 as num, 'test' as text")
+	if err != nil {
+		t.Fatalf("Query execution failed: %v", err)
+	}
 
 	if result.Error != nil {
 		t.Fatalf("Query execution failed: %v", result.Error)
