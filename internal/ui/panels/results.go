@@ -5,8 +5,15 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/atotto/clipboard"
 	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 )
+
+// yankRowMsg is sent when a row is successfully yanked to clipboard
+type yankRowMsg struct {
+	rowIndex int
+	success  bool
+}
 
 // ResultsPanel represents the right panel showing query results
 type ResultsPanel struct {
@@ -49,10 +56,10 @@ func (p *ResultsPanel) Clear() {
 	p.scrollY = 0
 }
 
-// Update handles keyboard input for scrolling
-func (p *ResultsPanel) Update(msg tea.Msg) {
+// Update handles keyboard input for scrolling and yanking
+func (p *ResultsPanel) Update(msg tea.Msg) tea.Cmd {
 	if !p.hasData || p.result == nil {
-		return
+		return nil
 	}
 
 	switch msg := msg.(type) {
@@ -88,8 +95,12 @@ func (p *ResultsPanel) Update(msg tea.Msg) {
 					p.scrollY = len(p.result.Rows) - 1
 				}
 			}
+		case "y":
+			// Yank current row to clipboard
+			return p.yankCurrentRow()
 		}
 	}
+	return nil
 }
 
 // View renders the results panel
@@ -234,7 +245,35 @@ func padOrTruncate(s string, width int) string {
 	return s + strings.Repeat(" ", width-len(s))
 }
 
+// yankCurrentRow copies the current row to clipboard as tab-separated values
+func (p *ResultsPanel) yankCurrentRow() tea.Cmd {
+	return func() tea.Msg {
+		if p.result == nil || len(p.result.Rows) == 0 {
+			return yankRowMsg{rowIndex: -1, success: false}
+		}
+
+		// Ensure scrollY is within bounds
+		if p.scrollY < 0 || p.scrollY >= len(p.result.Rows) {
+			return yankRowMsg{rowIndex: -1, success: false}
+		}
+
+		// Get the current row
+		row := p.result.Rows[p.scrollY]
+		
+		// Join cells with tabs for easy pasting into spreadsheets
+		textToCopy := strings.Join(row, "\t")
+		
+		// Copy to clipboard
+		err := clipboard.WriteAll(textToCopy)
+		if err != nil {
+			return yankRowMsg{rowIndex: p.scrollY, success: false}
+		}
+
+		return yankRowMsg{rowIndex: p.scrollY, success: true}
+	}
+}
+
 // Help returns help text for the results panel
 func (p *ResultsPanel) Help() string {
-	return "[←→] scroll horizontal  [↑↓] scroll vertical  [Home/End] jump"
+	return "[←→] scroll horizontal  [↑↓] scroll vertical  [Home/End] jump  [y] yank row"
 }
