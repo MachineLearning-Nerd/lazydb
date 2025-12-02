@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -82,4 +83,132 @@ func (r *ToolRegistry) Count() int {
 	defer r.mu.RUnlock()
 
 	return len(r.tools)
+}
+
+// GetToolsByCategory returns tools filtered by category
+func (r *ToolRegistry) GetToolsByCategory(categories []string) []Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if len(categories) == 0 {
+		// No filter, return all tools
+		tools := make([]Tool, 0, len(r.tools))
+		for _, tool := range r.tools {
+			tools = append(tools, tool)
+		}
+		return tools
+	}
+
+	// Build category set for fast lookup
+	categorySet := make(map[string]bool)
+	for _, cat := range categories {
+		categorySet[cat] = true
+	}
+
+	tools := make([]Tool, 0)
+	for _, tool := range r.tools {
+		if categorySet[tool.Category] {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
+}
+
+// GetToolsByTags returns tools matching any of the tags
+func (r *ToolRegistry) GetToolsByTags(tags []string) []Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if len(tags) == 0 {
+		return r.GetAllTools()
+	}
+
+	// Build tag set for fast lookup
+	tagSet := make(map[string]bool)
+	for _, tag := range tags {
+		tagSet[strings.ToLower(tag)] = true
+	}
+
+	tools := make([]Tool, 0)
+	for _, tool := range r.tools {
+		for _, toolTag := range tool.Tags {
+			if tagSet[strings.ToLower(toolTag)] {
+				tools = append(tools, tool)
+				break
+			}
+		}
+	}
+	return tools
+}
+
+// SearchTools returns tools matching keyword search in name, description, or tags
+func (r *ToolRegistry) SearchTools(query string) []Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if query == "" {
+		return r.GetAllTools()
+	}
+
+	queryLower := strings.ToLower(query)
+	tools := make([]Tool, 0)
+
+	for _, tool := range r.tools {
+		// Search in name
+		if strings.Contains(strings.ToLower(tool.Name), queryLower) {
+			tools = append(tools, tool)
+			continue
+		}
+		// Search in description
+		if strings.Contains(strings.ToLower(tool.Description), queryLower) {
+			tools = append(tools, tool)
+			continue
+		}
+		// Search in tags
+		for _, tag := range tool.Tags {
+			if strings.Contains(strings.ToLower(tag), queryLower) {
+				tools = append(tools, tool)
+				break
+			}
+		}
+	}
+	return tools
+}
+
+// GetCategories returns all unique categories from registered tools
+func (r *ToolRegistry) GetCategories() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	categorySet := make(map[string]bool)
+	for _, tool := range r.tools {
+		if tool.Category != "" {
+			categorySet[tool.Category] = true
+		}
+	}
+
+	categories := make([]string, 0, len(categorySet))
+	for cat := range categorySet {
+		categories = append(categories, cat)
+	}
+	return categories
+}
+
+// GetTags returns all unique tags from registered tools
+func (r *ToolRegistry) GetTags() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	tagSet := make(map[string]bool)
+	for _, tool := range r.tools {
+		for _, tag := range tool.Tags {
+			tagSet[tag] = true
+		}
+	}
+
+	tags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		tags = append(tags, tag)
+	}
+	return tags
 }

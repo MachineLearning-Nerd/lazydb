@@ -25,7 +25,9 @@ func (t *BasicTools) Register(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "list_all_tables",
-			Description: "Get a complete list of all available tables in the database, grouped by schema. Returns a lightweight reference of all tables.",
+			Description: "Lists all tables grouped by schema. Use for database overview.",
+			Category:    "schema",
+			Tags:        []string{"schema", "tables", "discovery", "overview"},
 			InputSchema: server.InputSchema{
 				Type:       "object",
 				Properties: map[string]server.Property{},
@@ -38,18 +40,25 @@ func (t *BasicTools) Register(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_schema",
-			Description: "Get detailed schema information for a specific table including columns, data types, nullable constraints, and default values.",
+			Description: "Get table columns, types, nullability, defaults. Use for structure analysis.",
+			Category:    "schema",
+			Tags:        []string{"schema", "columns", "structure", "types"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "public.orders", "include_constraints": true},
+				{"table_name": "sales.customers"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Name of the table (format: 'schema.table' or just 'table' for public schema)",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "public.orders", "sales.customers"},
 					},
 					"include_constraints": {
-						Type:        "boolean",
-						Description: "Include foreign keys and constraints information",
-						Default:     true,
+						Type:    "boolean",
+						Default: true,
 					},
 				},
 				Required: []string{"table_name"},
@@ -62,17 +71,23 @@ func (t *BasicTools) Register(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "search_tables",
-			Description: "Search for tables matching a pattern using SQL LIKE syntax. Useful for discovering tables related to a topic.",
+			Description: "Search tables by pattern (SQL LIKE). Use for discovery.",
+			Category:    "discovery",
+			Tags:        []string{"search", "discovery", "pattern", "find"},
+			InputExamples: []map[string]interface{}{
+				{"pattern": "user%"},
+				{"pattern": "%order%"},
+				{"pattern": "%payment%", "schema": "sales"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"pattern": {
-						Type:        "string",
-						Description: "Search pattern using SQL LIKE syntax (e.g., 'user%', '%order%', '%payment%')",
+						Type:     "string",
+						Examples: []string{"user%", "%order%", "%_log"},
 					},
 					"schema": {
-						Type:        "string",
-						Description: "Optional: filter by specific schema name",
+						Type: "string",
 					},
 				},
 				Required: []string{"pattern"},
@@ -85,18 +100,24 @@ func (t *BasicTools) Register(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_sample_data",
-			Description: "Get sample rows from a table to understand data patterns and actual values. Limited to 10 rows maximum.",
+			Description: "Get 1-10 sample rows. Use to understand data patterns.",
+			Category:    "discovery",
+			Tags:        []string{"sample", "data", "preview", "rows"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "orders", "limit": 10},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "public.orders"},
 					},
 					"limit": {
-						Type:        "integer",
-						Description: "Number of sample rows to retrieve (max 10)",
-						Default:     5,
+						Type:    "integer",
+						Default: 5,
 					},
 				},
 				Required: []string{"table_name"},
@@ -109,13 +130,20 @@ func (t *BasicTools) Register(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_count",
-			Description: "Get the total number of rows in a table. Useful for understanding table size.",
+			Description: "Get row count for a table.",
+			Category:    "discovery",
+			Tags:        []string{"count", "rows", "size"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "public.orders"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders"},
 					},
 				},
 				Required: []string{"table_name"},

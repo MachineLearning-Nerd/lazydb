@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/MachineLearning-Nerd/lazydb/internal/config"
@@ -24,7 +25,16 @@ func main() {
 	// Parse command-line flags
 	connectionName := flag.String("connection", "", "Connection name from LazyDB config (uses active if not specified)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
+	categories := flag.String("categories", "", "Comma-separated tool categories to load (schema,performance,relationships,statistics,discovery,triggers,optimization)")
+	preset := flag.String("preset", "", "Tool preset to load (minimal, standard, performance, full)")
+	listCategories := flag.Bool("list-categories", false, "List available categories and presets, then exit")
 	flag.Parse()
+
+	// Handle list-categories flag
+	if *listCategories {
+		printCategoriesHelp()
+		os.Exit(0)
+	}
 
 	// Setup logging to stderr (stdout is reserved for MCP protocol)
 	if *verbose {
@@ -112,6 +122,33 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Initial connection: %s (%s)\n", connCfg.Name, connCfg.Database)
 	}
 
+	// Parse categories from flags
+	// Default to "minimal" preset for best accuracy + context reduction
+	var enabledCategories []string
+	if *preset != "" {
+		// Use preset categories
+		enabledCategories = server.GetPresetCategories(*preset)
+		if enabledCategories == nil {
+			fmt.Fprintf(os.Stderr, "Unknown preset: %s (available: minimal, standard, performance, full)\n", *preset)
+			os.Exit(1)
+		}
+	} else if *categories != "" {
+		// Use explicit categories
+		enabledCategories = strings.Split(*categories, ",")
+		// Trim whitespace
+		for i, cat := range enabledCategories {
+			enabledCategories[i] = strings.TrimSpace(cat)
+		}
+	} else {
+		// Default to minimal preset (highest accuracy + lowest context)
+		// Use --preset=full for all tools
+		enabledCategories = server.GetPresetCategories("minimal")
+	}
+
+	if *verbose && len(enabledCategories) > 0 {
+		fmt.Fprintf(os.Stderr, "Enabled categories: %v\n", enabledCategories)
+	}
+
 	// Create MCP server configuration
 	mcpConfig := &server.Config{
 		ServerName:    serverName,
@@ -120,6 +157,7 @@ func main() {
 		MaxCacheSize:  100 * 1024 * 1024, // 100MB default
 		AIProvider:    getAIProvider(cfg),
 		AIAPIKey:      getAIAPIKey(),
+		Categories:    enabledCategories,
 	}
 
 	// Create MCP server with dynamic connection getter
@@ -136,8 +174,11 @@ func main() {
 	optimizationTools := tools.NewOptimizationTools(getActiveConnection)
 	optimizationTools.Register(mcpServer.GetRegistry())
 
+	compoundTools := tools.NewCompoundTools(getActiveConnection)
+	compoundTools.Register(mcpServer.GetRegistry())
+
 	if *verbose {
-		fmt.Fprintf(os.Stderr, "Registered %d tools (5 basic + 16 advanced + 3 optimization)\n", mcpServer.GetRegistry().Count())
+		fmt.Fprintf(os.Stderr, "Registered %d tools (5 basic + 16 advanced + 3 optimization + 2 compound)\n", mcpServer.GetRegistry().Count())
 	}
 
 	// Setup context with cancellation
@@ -196,4 +237,29 @@ func getAIAPIKey() string {
 		return key
 	}
 	return ""
+}
+
+// printCategoriesHelp prints available categories and presets
+func printCategoriesHelp() {
+	fmt.Println("LazyDB MCP Tool Categories")
+	fmt.Println("==========================")
+	fmt.Println()
+	fmt.Println("Available Categories:")
+	for _, cat := range server.AllCategories() {
+		desc := server.CategoryDescriptions[cat]
+		tools := server.CategoryTools[cat]
+		fmt.Printf("  %-15s %s (%d tools)\n", cat, desc, len(tools))
+	}
+	fmt.Println()
+	fmt.Println("Presets:")
+	fmt.Println("  minimal      Schema tools only (~450 tokens)")
+	fmt.Println("  standard     Schema, discovery, relationships (~1,200 tokens)")
+	fmt.Println("  performance  Performance, statistics, optimization (~1,100 tokens)")
+	fmt.Println("  full         All tools (~2,400 tokens)")
+	fmt.Println()
+	fmt.Println("Usage Examples:")
+	fmt.Println("  lazydb-mcp --preset=minimal")
+	fmt.Println("  lazydb-mcp --preset=performance")
+	fmt.Println("  lazydb-mcp --categories=schema,performance")
+	fmt.Println("  lazydb-mcp --categories=optimization,statistics")
 }

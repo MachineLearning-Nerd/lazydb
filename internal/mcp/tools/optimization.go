@@ -94,23 +94,28 @@ func (t *OptimizationTools) registerAnalysisTools(registry *server.ToolRegistry)
 	registry.Register(
 		server.Tool{
 			Name:        "analyze_query_performance",
-			Description: "Analyze query execution plan using deterministic rules to detect performance issues like sequential scans on large tables, missing indexes, high-cost operations, and provide CREATE INDEX suggestions. Only SELECT queries are allowed.",
+			Description: "Detect performance issues: seq scans, missing indexes, high cost. Suggests CREATE INDEX.",
+			Category:    "optimization",
+			Tags:        []string{"performance", "analysis", "index", "optimization"},
+			InputExamples: []map[string]interface{}{
+				{"query": "SELECT * FROM users WHERE email = 'test@example.com'"},
+				{"query": "SELECT * FROM orders WHERE status = 'pending'", "row_threshold": 5000},
+				{"query": "SELECT u.*, o.* FROM users u JOIN orders o ON u.id = o.user_id", "include_ddl_suggestions": true},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"query": {
-						Type:        "string",
-						Description: "SELECT query to analyze",
+						Type:     "string",
+						Examples: []string{"SELECT * FROM users WHERE id = 1", "SELECT * FROM orders WHERE status = 'pending'"},
 					},
 					"include_ddl_suggestions": {
-						Type:        "boolean",
-						Description: "Include CREATE INDEX DDL statements in suggestions",
-						Default:     true,
+						Type:    "boolean",
+						Default: true,
 					},
 					"row_threshold": {
-						Type:        "integer",
-						Description: "Minimum estimated rows to flag sequential scans (default: 10000)",
-						Default:     10000,
+						Type:    "integer",
+						Default: 10000,
 					},
 				},
 				Required: []string{"query"},
@@ -123,23 +128,28 @@ func (t *OptimizationTools) registerAnalysisTools(registry *server.ToolRegistry)
 	registry.Register(
 		server.Tool{
 			Name:        "get_query_optimization_context",
-			Description: "Aggregate comprehensive query context for AI/LLM-based optimization analysis. Returns EXPLAIN output, table DDLs, existing indexes, column statistics, and table statistics for all tables referenced in the query.",
+			Description: "Aggregate context for LLM optimization: EXPLAIN, DDLs, indexes, stats.",
+			Category:    "optimization",
+			Tags:        []string{"optimization", "context", "ai", "llm"},
+			InputExamples: []map[string]interface{}{
+				{"query": "SELECT * FROM users WHERE email = 'test@example.com'"},
+				{"query": "SELECT * FROM orders WHERE created_at > NOW() - INTERVAL '7 days'", "include_sample_data": true},
+				{"query": "SELECT u.*, o.* FROM users u JOIN orders o ON u.id = o.user_id", "include_related_tables": true},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"query": {
-						Type:        "string",
-						Description: "SELECT query to analyze",
+						Type:     "string",
+						Examples: []string{"SELECT * FROM users WHERE id = 1", "SELECT * FROM orders JOIN users ON orders.user_id = users.id"},
 					},
 					"include_sample_data": {
-						Type:        "boolean",
-						Description: "Include up to 5 sample rows per table",
-						Default:     false,
+						Type:    "boolean",
+						Default: false,
 					},
 					"include_related_tables": {
-						Type:        "boolean",
-						Description: "Include DDL and stats for all tables in query",
-						Default:     true,
+						Type:    "boolean",
+						Default: true,
 					},
 				},
 				Required: []string{"query"},
@@ -154,22 +164,34 @@ func (t *OptimizationTools) registerComparisonTools(registry *server.ToolRegistr
 	registry.Register(
 		server.Tool{
 			Name:        "compare_query_performance",
-			Description: "Compare performance metrics of two query versions (before/after optimization). Runs EXPLAIN ANALYZE on both queries multiple times and calculates improvement percentages for execution time, cost, and buffer usage.",
+			Description: "Compare before/after query performance with improvement %.",
+			Category:    "optimization",
+			Tags:        []string{"performance", "comparison", "benchmark", "optimization"},
+			InputExamples: []map[string]interface{}{
+				{
+					"query_before": "SELECT * FROM users WHERE email = 'test@example.com'",
+					"query_after":  "SELECT * FROM users WHERE email = 'test@example.com' AND id = 1",
+				},
+				{
+					"query_before": "SELECT * FROM orders WHERE status = 'pending'",
+					"query_after":  "SELECT id, status FROM orders WHERE status = 'pending'",
+					"runs":         5,
+				},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"query_before": {
-						Type:        "string",
-						Description: "Original SELECT query",
+						Type:     "string",
+						Examples: []string{"SELECT * FROM users WHERE email = 'test@example.com'"},
 					},
 					"query_after": {
-						Type:        "string",
-						Description: "Optimized SELECT query",
+						Type:     "string",
+						Examples: []string{"SELECT id, email FROM users WHERE email = 'test@example.com'"},
 					},
 					"runs": {
-						Type:        "integer",
-						Description: "Number of runs for averaging (default: 3, max: 5)",
-						Default:     3,
+						Type:    "integer",
+						Default: 3,
 					},
 				},
 				Required: []string{"query_before", "query_after"},

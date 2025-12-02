@@ -15,8 +15,9 @@ type Config struct {
 	ServerVersion string
 	EnableCache   bool
 	MaxCacheSize  int64
-	AIProvider    string // For smart tools (claude, gemini, openai)
+	AIProvider    string   // For smart tools (claude, gemini, openai)
 	AIAPIKey      string
+	Categories    []string // Tool categories to enable (empty = all)
 }
 
 // ConnectionGetter is a function that returns the current database connection
@@ -156,7 +157,43 @@ func (s *MCPServer) handleListTools(req *MCPRequest) *MCPResponse {
 		return s.errorResponse(req.ID, ErrorCodeInvalidRequest, "Server not initialized")
 	}
 
-	tools := s.toolRegistry.GetAllTools()
+	var tools []Tool
+
+	// Check for category filter in params (runtime override)
+	if req.Params != nil {
+		if categories, ok := req.Params["categories"].([]interface{}); ok && len(categories) > 0 {
+			// Convert []interface{} to []string
+			categoryStrings := make([]string, 0, len(categories))
+			for _, c := range categories {
+				if s, ok := c.(string); ok {
+					categoryStrings = append(categoryStrings, s)
+				}
+			}
+			tools = s.toolRegistry.GetToolsByCategory(categoryStrings)
+		} else if tags, ok := req.Params["tags"].([]interface{}); ok && len(tags) > 0 {
+			// Support tag-based filtering
+			tagStrings := make([]string, 0, len(tags))
+			for _, t := range tags {
+				if s, ok := t.(string); ok {
+					tagStrings = append(tagStrings, s)
+				}
+			}
+			tools = s.toolRegistry.GetToolsByTags(tagStrings)
+		} else if query, ok := req.Params["search"].(string); ok && query != "" {
+			// Support search-based filtering
+			tools = s.toolRegistry.SearchTools(query)
+		}
+	}
+
+	// Use config-based category filter if no runtime filter and config has categories
+	if tools == nil && len(s.config.Categories) > 0 {
+		tools = s.toolRegistry.GetToolsByCategory(s.config.Categories)
+	}
+
+	// Default: return all tools
+	if tools == nil {
+		tools = s.toolRegistry.GetAllTools()
+	}
 
 	return &MCPResponse{
 		JSONRPC: "2.0",

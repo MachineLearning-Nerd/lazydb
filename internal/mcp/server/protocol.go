@@ -45,11 +45,16 @@ const (
 	ErrorCodeInternalError  = -32603
 )
 
-// Tool represents an MCP tool definition
+// Tool represents an MCP tool definition with advanced features
+// Following Anthropic's advanced tool use patterns for improved accuracy
 type Tool struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description"`
 	InputSchema InputSchema `json:"inputSchema"`
+	// Advanced fields for better tool discovery and accuracy
+	Category      string                   `json:"category,omitempty"`       // Tool category (schema, performance, relationships, etc.)
+	Tags          []string                 `json:"tags,omitempty"`           // Searchable tags for tool discovery
+	InputExamples []map[string]interface{} `json:"input_examples,omitempty"` // Example inputs for better accuracy (72%→90% per Anthropic)
 }
 
 // InputSchema defines the JSON Schema for tool inputs
@@ -59,12 +64,15 @@ type InputSchema struct {
 	Required   []string            `json:"required,omitempty"`
 }
 
-// Property defines a schema property
+// Property defines a schema property with enhanced metadata
 type Property struct {
 	Type        string      `json:"type"`
-	Description string      `json:"description"`
+	Description string      `json:"description,omitempty"` // Optional for obvious parameters
 	Enum        []string    `json:"enum,omitempty"`
 	Default     interface{} `json:"default,omitempty"`
+	// Enhanced fields for better parameter accuracy
+	Examples []string `json:"examples,omitempty"` // Example values for this parameter
+	Format   string   `json:"format,omitempty"`   // Format hint (e.g., "schema.table", "YYYY-MM-DD")
 }
 
 // InitializeParams represents parameters for initialize request

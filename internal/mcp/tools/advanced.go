@@ -49,18 +49,25 @@ func (t *AdvancedTools) registerDDLTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_ddl",
-			Description: "Generate CREATE TABLE DDL statement including columns, constraints, and optionally indexes. Reconstructs the table definition from system catalogs.",
+			Description: "Generate CREATE TABLE DDL with columns, constraints, indexes.",
+			Category:    "schema",
+			Tags:        []string{"ddl", "create", "definition", "schema"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "public.orders", "include_indexes": true},
+				{"table_name": "sales.customers", "include_indexes": false},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table' for public schema)",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "public.orders"},
 					},
 					"include_indexes": {
-						Type:        "boolean",
-						Description: "Include CREATE INDEX statements in the DDL",
-						Default:     true,
+						Type:    "boolean",
+						Default: true,
 					},
 				},
 				Required: []string{"table_name"},
@@ -73,13 +80,20 @@ func (t *AdvancedTools) registerDDLTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_view_definition",
-			Description: "Get the SQL definition (SELECT statement) for a view.",
+			Description: "Get view's SELECT statement definition.",
+			Category:    "schema",
+			Tags:        []string{"view", "definition", "select", "ddl"},
+			InputExamples: []map[string]interface{}{
+				{"view_name": "active_users"},
+				{"view_name": "public.sales_summary"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"view_name": {
-						Type:        "string",
-						Description: "View name (format: 'schema.view' or just 'view')",
+						Type:     "string",
+						Format:   "schema.view or view",
+						Examples: []string{"active_users", "public.sales_summary"},
 					},
 				},
 				Required: []string{"view_name"},
@@ -92,18 +106,23 @@ func (t *AdvancedTools) registerDDLTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_function_definition",
-			Description: "Get the complete source code and definition for a function or stored procedure.",
+			Description: "Get function/procedure source code and signature.",
+			Category:    "schema",
+			Tags:        []string{"function", "procedure", "source", "definition"},
+			InputExamples: []map[string]interface{}{
+				{"function_name": "calculate_total"},
+				{"function_name": "process_order", "schema": "orders"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"function_name": {
-						Type:        "string",
-						Description: "Function name",
+						Type:     "string",
+						Examples: []string{"calculate_total", "get_user_balance"},
 					},
 					"schema": {
-						Type:        "string",
-						Description: "Schema name (defaults to 'public')",
-						Default:     "public",
+						Type:    "string",
+						Default: "public",
 					},
 				},
 				Required: []string{"function_name"},
@@ -122,18 +141,24 @@ func (t *AdvancedTools) registerIndexTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_indexes",
-			Description: "List all indexes on a table including index type, columns, uniqueness, and definition.",
+			Description: "List indexes: type, columns, uniqueness, definition.",
+			Category:    "performance",
+			Tags:        []string{"index", "performance", "optimization"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "orders", "include_definition": true},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "public.orders"},
 					},
 					"include_definition": {
-						Type:        "boolean",
-						Description: "Include full CREATE INDEX statement",
-						Default:     true,
+						Type:    "boolean",
+						Default: true,
 					},
 				},
 				Required: []string{"table_name"},
@@ -146,18 +171,24 @@ func (t *AdvancedTools) registerIndexTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_size",
-			Description: "Get physical size of a table including row count, disk usage, index sizes, and bloat estimation.",
+			Description: "Get table size: disk usage, row count, index sizes.",
+			Category:    "performance",
+			Tags:        []string{"size", "disk", "storage", "performance"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "logs", "include_indexes": true},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders"},
 					},
 					"include_indexes": {
-						Type:        "boolean",
-						Description: "Include individual index sizes",
-						Default:     true,
+						Type:    "boolean",
+						Default: true,
 					},
 				},
 				Required: []string{"table_name"},
@@ -170,23 +201,29 @@ func (t *AdvancedTools) registerIndexTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "explain_query",
-			Description: "Run EXPLAIN or EXPLAIN ANALYZE on a SELECT query to understand query execution plan and performance. Only SELECT queries are allowed for safety.",
+			Description: "Run EXPLAIN [ANALYZE] on SELECT. Returns execution plan.",
+			Category:    "performance",
+			Tags:        []string{"explain", "performance", "plan", "optimization"},
+			InputExamples: []map[string]interface{}{
+				{"query": "SELECT * FROM users WHERE id = 1"},
+				{"query": "SELECT * FROM orders WHERE status = 'pending'", "analyze": true},
+				{"query": "SELECT u.*, o.* FROM users u JOIN orders o ON u.id = o.user_id", "format": "json"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"query": {
-						Type:        "string",
-						Description: "SELECT query to explain",
+						Type:     "string",
+						Examples: []string{"SELECT * FROM users WHERE id = 1"},
 					},
 					"analyze": {
-						Type:        "boolean",
-						Description: "Run EXPLAIN ANALYZE (actually executes the query)",
-						Default:     false,
+						Type:    "boolean",
+						Default: false,
 					},
 					"format": {
-						Type:        "string",
-						Description: "Output format: 'text' or 'json'",
-						Default:     "text",
+						Type:    "string",
+						Enum:    []string{"text", "json"},
+						Default: "text",
 					},
 				},
 				Required: []string{"query"},
@@ -205,18 +242,26 @@ func (t *AdvancedTools) registerRelationshipTools(registry *server.ToolRegistry)
 	registry.Register(
 		server.Tool{
 			Name:        "get_foreign_keys",
-			Description: "Get all foreign key relationships for a table, including both incoming (tables referencing this table) and outgoing (tables this table references).",
+			Description: "Get FK relationships: incoming and/or outgoing.",
+			Category:    "relationships",
+			Tags:        []string{"foreign_key", "relationships", "references"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "orders"},
+				{"table_name": "users", "direction": "incoming"},
+				{"table_name": "products", "direction": "outgoing"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"orders", "users"},
 					},
 					"direction": {
-						Type:        "string",
-						Description: "Direction: 'incoming', 'outgoing', or 'both'",
-						Default:     "both",
+						Type:    "string",
+						Enum:    []string{"incoming", "outgoing", "both"},
+						Default: "both",
 					},
 				},
 				Required: []string{"table_name"},
@@ -229,18 +274,26 @@ func (t *AdvancedTools) registerRelationshipTools(registry *server.ToolRegistry)
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_constraints",
-			Description: "Get all constraints on a table including PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK, and NOT NULL constraints.",
+			Description: "Get constraints: PK, FK, UNIQUE, CHECK, NOT NULL.",
+			Category:    "relationships",
+			Tags:        []string{"constraints", "primary_key", "unique", "check"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "orders", "constraint_type": "FOREIGN KEY"},
+				{"table_name": "products", "constraint_type": "UNIQUE"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders"},
 					},
 					"constraint_type": {
-						Type:        "string",
-						Description: "Filter by type: 'PRIMARY KEY', 'FOREIGN KEY', 'UNIQUE', 'CHECK', or 'all'",
-						Default:     "all",
+						Type:    "string",
+						Enum:    []string{"PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK", "all"},
+						Default: "all",
 					},
 				},
 				Required: []string{"table_name"},
@@ -253,13 +306,20 @@ func (t *AdvancedTools) registerRelationshipTools(registry *server.ToolRegistry)
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_dependencies",
-			Description: "Find all database objects (views, materialized views, functions) that depend on this table.",
+			Description: "Find views/functions that depend on this table.",
+			Category:    "relationships",
+			Tags:        []string{"dependencies", "views", "functions", "impact"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "public.orders"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders"},
 					},
 				},
 				Required: []string{"table_name"},
@@ -278,13 +338,20 @@ func (t *AdvancedTools) registerTriggerTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_triggers",
-			Description: "List all triggers on a table including event type (INSERT/UPDATE/DELETE), timing (BEFORE/AFTER), and execution (FOR EACH ROW/STATEMENT).",
+			Description: "List triggers: event, timing, execution type.",
+			Category:    "triggers",
+			Tags:        []string{"trigger", "event", "automation"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "public.orders"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders"},
 					},
 				},
 				Required: []string{"table_name"},
@@ -297,17 +364,24 @@ func (t *AdvancedTools) registerTriggerTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_trigger_definition",
-			Description: "Get the complete definition and function source code for a specific trigger.",
+			Description: "Get trigger definition and function source.",
+			Category:    "triggers",
+			Tags:        []string{"trigger", "definition", "source"},
+			InputExamples: []map[string]interface{}{
+				{"trigger_name": "audit_log_trigger", "table_name": "users"},
+				{"trigger_name": "update_timestamp", "table_name": "orders"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"trigger_name": {
-						Type:        "string",
-						Description: "Trigger name",
+						Type:     "string",
+						Examples: []string{"audit_log_trigger", "update_timestamp"},
 					},
 					"table_name": {
-						Type:        "string",
-						Description: "Table name where the trigger is defined",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders"},
 					},
 				},
 				Required: []string{"trigger_name", "table_name"},
@@ -326,17 +400,25 @@ func (t *AdvancedTools) registerStatsTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_column_stats",
-			Description: "Get statistical information about table columns including null percentage, distinct values, most common values, and data distribution.",
+			Description: "Get column statistics: nulls, distinct values, distribution.",
+			Category:    "statistics",
+			Tags:        []string{"statistics", "columns", "distribution", "analysis"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "orders", "column_name": "status"},
+				{"table_name": "products", "column_name": "price"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders"},
 					},
 					"column_name": {
-						Type:        "string",
-						Description: "Specific column name (optional - if not provided, returns stats for all columns)",
+						Type:     "string",
+						Examples: []string{"status", "created_at", "email"},
 					},
 				},
 				Required: []string{"table_name"},
@@ -349,13 +431,20 @@ func (t *AdvancedTools) registerStatsTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_stats",
-			Description: "Get table-level statistics including row count estimates, dead tuples, last vacuum/analyze times, and index usage.",
+			Description: "Get table stats: live/dead rows, vacuum times, index usage.",
+			Category:    "statistics",
+			Tags:        []string{"statistics", "vacuum", "maintenance", "health"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "public.orders"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders"},
 					},
 				},
 				Required: []string{"table_name"},
@@ -374,13 +463,20 @@ func (t *AdvancedTools) registerDiscoveryTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "list_sequences",
-			Description: "List all sequences in the database with current value, increment, min/max values, and associated tables.",
+			Description: "List sequences with current value, increment, bounds.",
+			Category:    "discovery",
+			Tags:        []string{"sequence", "autoincrement", "discovery"},
+			InputExamples: []map[string]interface{}{
+				{},
+				{"schema": "public"},
+				{"schema": "sales"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"schema": {
-						Type:        "string",
-						Description: "Filter by schema name (optional)",
+						Type:     "string",
+						Examples: []string{"public", "sales"},
 					},
 				},
 			},
@@ -392,13 +488,20 @@ func (t *AdvancedTools) registerDiscoveryTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "list_materialized_views",
-			Description: "List all materialized views with size, definition, and last refresh time.",
+			Description: "List materialized views with size and definition.",
+			Category:    "discovery",
+			Tags:        []string{"materialized_view", "cache", "discovery"},
+			InputExamples: []map[string]interface{}{
+				{},
+				{"schema": "public"},
+				{"schema": "analytics"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"schema": {
-						Type:        "string",
-						Description: "Filter by schema name (optional)",
+						Type:     "string",
+						Examples: []string{"public", "analytics"},
 					},
 				},
 			},
@@ -410,13 +513,21 @@ func (t *AdvancedTools) registerDiscoveryTools(registry *server.ToolRegistry) {
 	registry.Register(
 		server.Tool{
 			Name:        "get_table_references",
-			Description: "Find all tables that this table references (through foreign keys) and all tables that reference this table. Provides a complete relationship map.",
+			Description: "Map all FK relationships to/from this table.",
+			Category:    "relationships",
+			Tags:        []string{"references", "foreign_key", "relationships", "map"},
+			InputExamples: []map[string]interface{}{
+				{"table_name": "users"},
+				{"table_name": "orders"},
+				{"table_name": "public.products"},
+			},
 			InputSchema: server.InputSchema{
 				Type: "object",
 				Properties: map[string]server.Property{
 					"table_name": {
-						Type:        "string",
-						Description: "Table name (format: 'schema.table' or just 'table')",
+						Type:     "string",
+						Format:   "schema.table or table",
+						Examples: []string{"users", "orders", "products"},
 					},
 				},
 				Required: []string{"table_name"},
