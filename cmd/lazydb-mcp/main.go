@@ -133,8 +133,11 @@ func main() {
 	advancedTools := tools.NewAdvancedTools(getActiveConnection)
 	advancedTools.Register(mcpServer.GetRegistry())
 
+	optimizationTools := tools.NewOptimizationTools(getActiveConnection)
+	optimizationTools.Register(mcpServer.GetRegistry())
+
 	if *verbose {
-		fmt.Fprintf(os.Stderr, "Registered %d tools (5 basic + 16 advanced)\n", mcpServer.GetRegistry().Count())
+		fmt.Fprintf(os.Stderr, "Registered %d tools (5 basic + 16 advanced + 3 optimization)\n", mcpServer.GetRegistry().Count())
 	}
 
 	// Setup context with cancellation
