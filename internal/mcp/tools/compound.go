@@ -12,12 +12,18 @@ import (
 
 // CompoundTools provides high-level tools that combine multiple operations
 type CompoundTools struct {
-	connGetter server.ConnectionGetter
+	connGetter     server.ConnectionGetter
+	sessionManager SessionManager
 }
 
 // NewCompoundTools creates a new CompoundTools instance
 func NewCompoundTools(connGetter server.ConnectionGetter) *CompoundTools {
-	return &CompoundTools{connGetter: connGetter}
+	return &CompoundTools{connGetter: connGetter, sessionManager: nil}
+}
+
+// NewCompoundToolsWithSession creates a new CompoundTools instance with session manager
+func NewCompoundToolsWithSession(connGetter server.ConnectionGetter, sessionManager SessionManager) *CompoundTools {
+	return &CompoundTools{connGetter: connGetter, sessionManager: sessionManager}
 }
 
 // Register registers all compound tools with the tool registry
@@ -369,6 +375,14 @@ func (t *CompoundTools) searchTools(ctx context.Context, args map[string]interfa
 		return "", fmt.Errorf("query parameter is required")
 	}
 
+	// Build enabled categories set for status lookup
+	enabledCategories := make(map[string]bool)
+	if t.sessionManager != nil {
+		for _, cat := range t.sessionManager.GetEnabledCategories() {
+			enabledCategories[cat] = true
+		}
+	}
+
 	// Tool definitions with keywords for search
 	toolInfo := []map[string]interface{}{
 		// Basic Tools
@@ -405,6 +419,12 @@ func (t *CompoundTools) searchTools(ctx context.Context, args map[string]interfa
 		{"name": "compare_query_performance", "category": "optimization", "keywords": []string{"compare", "benchmark", "before", "after"}},
 		// Compound Tools
 		{"name": "analyze_table_comprehensive", "category": "compound", "keywords": []string{"comprehensive", "full", "analysis", "all"}},
+		// Management Tools (always-on)
+		{"name": "lazydb_enable_category", "category": "meta", "keywords": []string{"enable", "add", "activate", "category"}, "always_on": true},
+		{"name": "lazydb_disable_category", "category": "meta", "keywords": []string{"disable", "remove", "deactivate", "category"}, "always_on": true},
+		{"name": "lazydb_list_categories", "category": "meta", "keywords": []string{"list", "categories", "status", "available"}, "always_on": true},
+		{"name": "lazydb_reset_session", "category": "meta", "keywords": []string{"reset", "session", "preset", "default"}, "always_on": true},
+		{"name": "search_lazydb_tools", "category": "meta", "keywords": []string{"search", "find", "tools", "discover"}, "always_on": true},
 	}
 
 	queryLower := strings.ToLower(query)
@@ -443,14 +463,44 @@ func (t *CompoundTools) searchTools(ctx context.Context, args map[string]interfa
 		}
 
 		if matched {
-			matches = append(matches, tool)
+			// Add enabled status
+			isAlwaysOn := false
+			if ao, ok := tool["always_on"].(bool); ok {
+				isAlwaysOn = ao
+			}
+
+			enabled := isAlwaysOn || enabledCategories[tool["category"].(string)]
+
+			matchResult := map[string]interface{}{
+				"name":      tool["name"],
+				"category":  tool["category"],
+				"keywords":  tool["keywords"],
+				"enabled":   enabled,
+				"always_on": isAlwaysOn,
+			}
+
+			// Add hint for disabled tools
+			if !enabled {
+				matchResult["hint"] = fmt.Sprintf("Enable with: lazydb_enable_category(\"%s\")", tool["category"])
+			}
+
+			matches = append(matches, matchResult)
+		}
+	}
+
+	// Count enabled vs disabled
+	enabledCount := 0
+	for _, m := range matches {
+		if m["enabled"].(bool) {
+			enabledCount++
 		}
 	}
 
 	output, _ := json.MarshalIndent(map[string]interface{}{
-		"query":   query,
-		"matches": matches,
-		"count":   len(matches),
+		"query":         query,
+		"matches":       matches,
+		"count":         len(matches),
+		"enabled_count": enabledCount,
 	}, "", "  ")
 
 	return string(output), nil

@@ -54,7 +54,11 @@ var CategoryTools = map[string][]string{
 		"compare_query_performance",
 	},
 	CategoryMeta: {
-		"search_lazydb_tools", // Key tool for dynamic tool discovery
+		"search_lazydb_tools",      // Key tool for dynamic tool discovery
+		"lazydb_enable_category",   // Enable a category at runtime
+		"lazydb_disable_category",  // Disable a category at runtime
+		"lazydb_list_categories",   // List all categories with status
+		"lazydb_reset_session",     // Reset session to a preset
 	},
 	CategoryCompound: {
 		"analyze_table_comprehensive",

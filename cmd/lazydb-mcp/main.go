@@ -174,11 +174,16 @@ func main() {
 	optimizationTools := tools.NewOptimizationTools(getActiveConnection)
 	optimizationTools.Register(mcpServer.GetRegistry())
 
-	compoundTools := tools.NewCompoundTools(getActiveConnection)
+	// Register compound tools with session manager for enabled status in search
+	compoundTools := tools.NewCompoundToolsWithSession(getActiveConnection, mcpServer)
 	compoundTools.Register(mcpServer.GetRegistry())
 
+	// Register management tools for dynamic category enable/disable (always available)
+	managementTools := tools.NewManagementTools(mcpServer)
+	managementTools.Register(mcpServer.GetRegistry())
+
 	if *verbose {
-		fmt.Fprintf(os.Stderr, "Registered %d tools (5 basic + 16 advanced + 3 optimization + 2 compound)\n", mcpServer.GetRegistry().Count())
+		fmt.Fprintf(os.Stderr, "Registered %d tools (5 basic + 16 advanced + 3 optimization + 2 compound + 4 management)\n", mcpServer.GetRegistry().Count())
 	}
 
 	// Setup context with cancellation
@@ -252,14 +257,21 @@ func printCategoriesHelp() {
 	}
 	fmt.Println()
 	fmt.Println("Presets:")
-	fmt.Println("  minimal      Schema tools only (~450 tokens)")
+	fmt.Println("  minimal      Schema tools only (~450 tokens) [DEFAULT]")
 	fmt.Println("  standard     Schema, discovery, relationships (~1,200 tokens)")
 	fmt.Println("  performance  Performance, statistics, optimization (~1,100 tokens)")
 	fmt.Println("  full         All tools (~2,400 tokens)")
 	fmt.Println()
+	fmt.Println("Dynamic Tools (Always Available):")
+	fmt.Println("  lazydb_enable_category   - Enable a category at runtime")
+	fmt.Println("  lazydb_disable_category  - Disable a category at runtime")
+	fmt.Println("  lazydb_list_categories   - List all categories with status")
+	fmt.Println("  lazydb_reset_session     - Reset session to a preset")
+	fmt.Println("  search_lazydb_tools      - Search for tools by keyword")
+	fmt.Println()
 	fmt.Println("Usage Examples:")
-	fmt.Println("  lazydb-mcp --preset=minimal")
-	fmt.Println("  lazydb-mcp --preset=performance")
-	fmt.Println("  lazydb-mcp --categories=schema,performance")
-	fmt.Println("  lazydb-mcp --categories=optimization,statistics")
+	fmt.Println("  lazydb-mcp                         # Start with minimal preset")
+	fmt.Println("  lazydb-mcp --preset=performance    # Start with performance preset")
+	fmt.Println("  lazydb-mcp --preset=full           # Start with all tools")
+	fmt.Println("  lazydb-mcp --categories=schema,optimization")
 }
