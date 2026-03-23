@@ -1,5 +1,6 @@
 # Binaries
-lazydb
+/lazydb
+/bin/
 *.exe
 *.exe~
 *.dll
