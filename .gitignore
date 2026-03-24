@@ -34,3 +34,5 @@ Thumbs.db
 *.local.toml
 .env
 .gemini-clipboard
+lazydb-mcp
+bin
