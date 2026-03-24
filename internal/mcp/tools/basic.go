@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/MachineLearning-Nerd/lazydb/internal/db"
 	"github.com/MachineLearning-Nerd/lazydb/internal/mcp/server"
 )
 
@@ -150,6 +151,39 @@ func (t *BasicTools) Register(registry *server.ToolRegistry) {
 			},
 		},
 		t.getTableCount,
+	)
+
+	// Tool 6: execute_query
+	registry.Register(
+		server.Tool{
+			Name:        "execute_query",
+			Description: "Execute a read-only SQL query. Only SELECT and WITH (CTE) statements are allowed. INSERT, UPDATE, DELETE, and DDL are rejected. Returns JSON array of row objects. Auto-limits to 50 rows if no LIMIT specified (max 500).",
+			Category:    "schema",
+			Tags:        []string{"query", "select", "execute", "sql", "read"},
+			InputExamples: []map[string]interface{}{
+				{"query": "SELECT * FROM users LIMIT 10"},
+				{"query": "SELECT id, name FROM products WHERE price > 100"},
+				{"query": "WITH recent AS (SELECT * FROM orders WHERE created_at > now() - interval '7 days') SELECT * FROM recent"},
+				{"query": "SELECT * FROM users", "limit": 100},
+			},
+			InputSchema: server.InputSchema{
+				Type: "object",
+				Properties: map[string]server.Property{
+					"query": {
+						Type:        "string",
+						Description: "SQL SELECT query to execute. Only SELECT and WITH (CTE) statements allowed.",
+						Examples:    []string{"SELECT * FROM users LIMIT 10", "WITH cte AS (...) SELECT * FROM cte"},
+					},
+					"limit": {
+						Type:        "integer",
+						Description: "Maximum rows to return. Default 50, max 500. Overrides LIMIT in query if lower.",
+						Default:     50,
+					},
+				},
+				Required: []string{"query"},
+			},
+		},
+		t.executeQuery,
 	)
 }
 
@@ -394,6 +428,72 @@ func (t *BasicTools) getTableCount(ctx context.Context, args map[string]interfac
 		"schema": schema,
 		"count":  count,
 	}, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal result: %w", err)
+	}
+
+	return string(output), nil
+}
+
+// executeQuery executes a read-only SQL query and returns results as JSON
+func (t *BasicTools) executeQuery(ctx context.Context, args map[string]interface{}) (string, error) {
+	conn, err := t.connGetter()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database connection: %w", err)
+	}
+
+	query, ok := args["query"].(string)
+	if !ok || strings.TrimSpace(query) == "" {
+		return "", fmt.Errorf("query parameter is required")
+	}
+
+	// Validate read-only using AST-based validator
+	if err := db.IsReadOnlyQuery(query); err != nil {
+		return "", fmt.Errorf("query rejected: %w", err)
+	}
+
+	// Parse limit parameter
+	maxRows := 50
+	if val, ok := args["limit"].(float64); ok {
+		maxRows = int(val)
+	}
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	if maxRows > 500 {
+		maxRows = 500
+	}
+
+	// Inject LIMIT if outermost SELECT has no LIMIT clause (AST-based check)
+	if !db.HasOuterLimit(query) {
+		query = fmt.Sprintf("%s LIMIT %d", strings.TrimRight(strings.TrimSpace(query), ";"), maxRows)
+	}
+
+	result, err := conn.ExecuteQuery(ctx, query)
+	if err != nil {
+		return "", fmt.Errorf("query execution failed: %w", err)
+	}
+
+	// Convert to JSON array of objects
+	rows := make([]map[string]interface{}, 0, len(result.Rows))
+	for _, row := range result.Rows {
+		rowMap := make(map[string]interface{}, len(result.Columns))
+		for j, col := range result.Columns {
+			if j < len(row) {
+				rowMap[col] = row[j]
+			}
+		}
+		rows = append(rows, rowMap)
+	}
+
+	response := map[string]interface{}{
+		"columns":      result.Columns,
+		"rows":         rows,
+		"row_count":    len(rows),
+		"execution_ms": result.ExecutionMs,
+	}
+
+	output, err := json.MarshalIndent(response, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal result: %w", err)
 	}

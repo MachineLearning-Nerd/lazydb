@@ -22,6 +22,7 @@ var CategoryTools = map[string][]string{
 		"get_table_ddl",
 		"get_view_definition",
 		"get_function_definition",
+		"execute_query",
 	},
 	CategoryPerformance: {
 		"explain_query",
