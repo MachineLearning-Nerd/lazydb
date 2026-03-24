@@ -102,6 +102,61 @@ func cleanErrorMessage(errMsg string) string {
 	return errMsg
 }
 
+// IsReadOnlyQuery validates that a SQL query is read-only (SELECT or WITH/CTE only).
+// Uses pg_query_go to parse the AST and reject any non-SELECT statements.
+// Also rejects SELECT INTO (which creates a table).
+func IsReadOnlyQuery(query string) error {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return fmt.Errorf("query cannot be empty")
+	}
+
+	result, err := pg_query.Parse(trimmed)
+	if err != nil {
+		return fmt.Errorf("invalid SQL: %w", err)
+	}
+
+	if len(result.Stmts) == 0 {
+		return fmt.Errorf("no SQL statements found")
+	}
+
+	if len(result.Stmts) > 1 {
+		return fmt.Errorf("only single statements allowed, found %d", len(result.Stmts))
+	}
+
+	stmt := result.Stmts[0].Stmt
+	if stmt == nil {
+		return fmt.Errorf("empty statement")
+	}
+
+	selectNode, ok := stmt.Node.(*pg_query.Node_SelectStmt)
+	if !ok {
+		return fmt.Errorf("only SELECT queries are allowed (got %T)", stmt.Node)
+	}
+
+	// Block SELECT INTO (creates a new table)
+	if selectNode.SelectStmt.IntoClause != nil {
+		return fmt.Errorf("SELECT INTO is not allowed (creates a table)")
+	}
+
+	return nil
+}
+
+// HasOuterLimit checks if the outermost SELECT statement has a LIMIT clause.
+// Uses AST inspection instead of string matching to avoid false positives
+// from column/table names containing "limit".
+func HasOuterLimit(query string) bool {
+	result, err := pg_query.Parse(strings.TrimSpace(query))
+	if err != nil || len(result.Stmts) == 0 {
+		return false
+	}
+	selectNode, ok := result.Stmts[0].Stmt.Node.(*pg_query.Node_SelectStmt)
+	if !ok {
+		return false
+	}
+	return selectNode.SelectStmt.LimitCount != nil
+}
+
 // GetSuggestions provides helpful suggestions based on error type
 func (v *SQLValidator) GetSuggestions(err ValidationError) []string {
 	suggestions := []string{}
